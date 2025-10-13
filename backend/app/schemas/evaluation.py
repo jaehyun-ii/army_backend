@@ -36,7 +36,7 @@ class EvalRunBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
     phase: EvalPhase
-    model_version_id: UUID
+    detect_model_version_id: UUID
     dataset_dimension: DatasetDimension = DatasetDimension.TWO_D
     # 2D datasets
     base_dataset_id: Optional[UUID] = None
@@ -260,7 +260,7 @@ class EvalRunPairResponse(BaseModel):
     """Schema for pre/post evaluation run pair comparison."""
     pre_run_id: UUID
     post_run_id: UUID
-    model_version_id: UUID
+    detect_model_version_id: UUID
     base_dataset_id: UUID
     attack_dataset_id: UUID
     pre_metrics: Optional[Dict[str, Any]] = None

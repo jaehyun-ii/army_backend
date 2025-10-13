@@ -113,7 +113,7 @@ async def get_dataset_statistics(
 async def get_dataset_detection_statistics(
     dataset_id: UUID,
     db: AsyncSession = Depends(get_db),
-    model_version_id: UUID = Body(..., description="Model version ID for detection"),
+    detect_model_version_id: UUID = Body(..., description="Model version ID for detection"),
     conf_threshold: float = Body(0.25, ge=0.0, le=1.0, description="Confidence threshold"),
 ) -> Dict[str, Any]:
     """Get detection statistics for a dataset.
@@ -140,7 +140,7 @@ async def get_dataset_detection_statistics(
         stats = await dataset_statistics_service.get_dataset_detection_statistics(
             db=db,
             dataset_id=dataset_id,
-            model_version_id=model_version_id,
+            model_version_id=detect_model_version_id,
             conf_threshold=conf_threshold
         )
         return stats

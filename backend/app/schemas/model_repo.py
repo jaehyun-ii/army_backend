@@ -51,14 +51,14 @@ class ODModelVersionBase(BaseModel):
 class ODModelVersionCreate(ODModelVersionBase):
     """Schema for creating OD model version."""
 
-    model_id: UUID
+    detect_model_id: UUID
 
 
 class ODModelVersionResponse(ODModelVersionBase):
     """Schema for OD model version response."""
 
     id: UUID
-    model_id: UUID
+    detect_model_id: UUID
     created_by: Optional[UUID]
     published_at: Optional[datetime]
     created_at: datetime
@@ -82,14 +82,14 @@ class ODModelArtifactBase(BaseModel):
 class ODModelArtifactCreate(ODModelArtifactBase):
     """Schema for creating OD model artifact."""
 
-    model_version_id: UUID
+    detect_model_version_id: UUID
 
 
 class ODModelArtifactResponse(ODModelArtifactBase):
     """Schema for OD model artifact response."""
 
     id: UUID
-    model_version_id: UUID
+    detect_model_version_id: UUID
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

@@ -19,7 +19,7 @@ class Noise2DConfig(AttackConfig):
     epsilon: Optional[float] = Field(None, description="Noise strength/budget (0-255 scale)", ge=0.0, le=255.0)
 
     # For gradient-based noise (FGSM, PGD)
-    model_version_id: Optional[str] = Field(None, description="Model version ID (for gradient-based)")
+    detect_model_version_id: Optional[str] = Field(None, description="Model version ID (for gradient-based)")
     alpha: Optional[float] = Field(None, description="Step size (for iterative methods, 0-255 scale)", ge=0.0, le=255.0)
     iterations: Optional[int] = Field(None, description="Number of iterations (for iterative)", ge=1, le=1000)
 
@@ -182,8 +182,8 @@ class GradientBasedNoise2DPlugin(Noise2DAttackPlugin):
 
     async def validate_config(self, config: Noise2DConfig) -> bool:
         """Validate gradient-based noise config."""
-        if not config.model_version_id:
-            raise ValueError("model_version_id required for gradient-based attacks")
+        if not config.detect_model_version_id:
+            raise ValueError("detect_model_version_id required for gradient-based attacks")
 
         if config.epsilon is None:
             raise ValueError("epsilon required for gradient-based attacks")

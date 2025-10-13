@@ -27,7 +27,7 @@ async def generate_fgsm_attack_dataset(
     *,
     db: AsyncSession = Depends(get_db),
     attack_dataset_name: str = Body(..., description="Name for attack dataset"),
-    model_version_id: UUID = Body(..., description="Model version ID"),
+    detect_model_version_id: UUID = Body(..., description="Model version ID"),
     base_dataset_id: UUID = Body(..., description="Base dataset ID"),
     epsilon: float = Body(8.0, ge=0.1, le=255.0, description="Perturbation magnitude (0-255)"),
     targeted: bool = Body(False, description="Whether to use targeted attack"),
@@ -44,7 +44,7 @@ async def generate_fgsm_attack_dataset(
 
     Parameters:
         - attack_dataset_name: Name for the attack dataset
-        - model_version_id: Model to attack
+        - detect_model_version_id: Model to attack
         - base_dataset_id: Base dataset to attack
         - epsilon: Perturbation magnitude (0-255 scale, default: 8.0)
         - targeted: Use targeted attack (default: False)
@@ -64,7 +64,7 @@ async def generate_fgsm_attack_dataset(
             attack_name=attack_dataset_name,
             base_dataset_id=base_dataset_id,
             plugin_name="fgsm_2d",
-            model_version_id=model_version_id,
+            model_version_id=detect_model_version_id,
             epsilon=epsilon,
             targeted=targeted,
             target_class=target_class,
@@ -106,7 +106,7 @@ async def generate_pgd_attack_dataset(
     *,
     db: AsyncSession = Depends(get_db),
     attack_dataset_name: str = Body(..., description="Name for attack dataset"),
-    model_version_id: UUID = Body(..., description="Model version ID"),
+    detect_model_version_id: UUID = Body(..., description="Model version ID"),
     base_dataset_id: UUID = Body(..., description="Base dataset ID"),
     epsilon: float = Body(8.0, ge=0.1, le=255.0, description="Max perturbation magnitude"),
     alpha: float = Body(2.0, ge=0.01, le=50.0, description="Step size"),
@@ -125,7 +125,7 @@ async def generate_pgd_attack_dataset(
 
     Parameters:
         - attack_dataset_name: Name for the attack dataset
-        - model_version_id: Model to attack
+        - detect_model_version_id: Model to attack
         - base_dataset_id: Base dataset to attack
         - epsilon: Max perturbation magnitude (0-255 scale, default: 8.0)
         - alpha: Step size (default: 2.0)
@@ -147,7 +147,7 @@ async def generate_pgd_attack_dataset(
             attack_name=attack_dataset_name,
             base_dataset_id=base_dataset_id,
             plugin_name="pgd_2d",
-            model_version_id=model_version_id,
+            model_version_id=detect_model_version_id,
             epsilon=epsilon,
             alpha=alpha,
             iterations=iterations,
@@ -339,7 +339,7 @@ async def generate_iterative_gradient_attack_dataset(
     *,
     db: AsyncSession = Depends(get_db),
     attack_dataset_name: str = Body(..., description="Name for attack dataset"),
-    model_version_id: UUID = Body(..., description="Model version ID"),
+    detect_model_version_id: UUID = Body(..., description="Model version ID"),
     base_dataset_id: UUID = Body(..., description="Base dataset ID"),
     max_iterations: int = Body(10000, ge=1, le=100000, description="Maximum iterations (default: 10000)"),
     step_size: float = Body(1.0, ge=0.0, description="Gradient step size (default: 1.0)"),
@@ -359,7 +359,7 @@ async def generate_iterative_gradient_attack_dataset(
 
     Parameters:
         - attack_dataset_name: Name for the attack dataset
-        - model_version_id: Model to attack
+        - detect_model_version_id: Model to attack
         - base_dataset_id: Base dataset to attack
         - max_iterations: Maximum number of iterations (default: 1000)
         - step_size: Gradient step size in normalized range (default: 1.0)
@@ -379,7 +379,7 @@ async def generate_iterative_gradient_attack_dataset(
             attack_name=attack_dataset_name,
             base_dataset_id=base_dataset_id,
             plugin_name="iterative_gradient_2d",
-            model_version_id=model_version_id,
+            model_version_id=detect_model_version_id,
             max_iterations=max_iterations,
             step_size=step_size,
             epsilon=epsilon,

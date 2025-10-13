@@ -213,7 +213,7 @@ async def generate_attack_dataset(
     *,
     db: AsyncSession = Depends(get_db),
     attack_dataset_name: str = Body(..., description="Name for attack dataset"),
-    model_version_id: UUID = Body(..., description="Model version ID"),
+    detect_model_version_id: UUID = Body(..., description="Model version ID"),
     base_dataset_id: UUID = Body(..., description="Base dataset ID"),
     patch_id: UUID = Body(..., description="Patch ID to apply"),
     target_class: str = Body(..., description="Target class to apply patch to"),

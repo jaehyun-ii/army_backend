@@ -9,7 +9,7 @@ from uuid import UUID
 
 class ModelUploadRequest(BaseModel):
     """Request schema for uploading custom model."""
-    model_name: str = Field(..., min_length=1, max_length=200)
+    detect_model_name: str = Field(..., min_length=1, max_length=200)
     version: str = Field(..., min_length=1, max_length=64)
     description: Optional[str] = None
     framework: str = Field(..., description="Model framework (pytorch, tensorflow, onnx, etc.)")
@@ -17,7 +17,7 @@ class ModelUploadRequest(BaseModel):
 
 class ModelUploadResponse(BaseModel):
     """Response schema for model upload."""
-    model_id: UUID
+    detect_model_id: UUID
     version_id: UUID
     upload_status: str
     message: str
@@ -58,13 +58,13 @@ class ModelInferenceResponse(BaseModel):
     """Response schema for model inference."""
     detections: List[DetectionResponse]
     inference_time_ms: Optional[float] = None
-    model_info: Dict[str, Any] = Field(default_factory=dict)
+    detect_model_info: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ModelListResponse(BaseModel):
     """Response schema for listing custom models."""
-    model_id: str
-    model_name: str
+    detect_model_id: str
+    detect_model_name: str
     version: str
     framework: str
     is_loaded: bool
@@ -74,8 +74,8 @@ class ModelListResponse(BaseModel):
 
 class ModelInfoResponse(BaseModel):
     """Detailed model information."""
-    model_id: str
-    model_name: str
+    detect_model_id: str
+    detect_model_name: str
     version: str
     framework: str
     is_loaded: bool

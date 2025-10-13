@@ -56,7 +56,7 @@ class ImageMetadata(BaseModel):
 
 class InferenceMetadataJSON(BaseModel):
     """Complete inference metadata JSON structure."""
-    model: str = Field(..., min_length=1, description="Model name/identifier")
+    detect_model_name: str = Field(..., min_length=1, description="Model name/identifier")
     timestamp: str = Field(..., description="Inference timestamp (ISO format)")
     images: List[ImageMetadata] = Field(..., min_items=1, description="List of image metadata")
 

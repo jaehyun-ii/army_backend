@@ -24,7 +24,7 @@ class Patch2DConfig(AttackConfig):
     batch_size: int = Field(8, description="Batch size for training", ge=1, le=128)
 
     # Model and target
-    model_version_id: str = Field(..., description="Model version ID to attack")
+    detect_model_version_id: str = Field(..., description="Model version ID to attack")
     target_class: str = Field(..., description="Target class name")
 
     # Optional

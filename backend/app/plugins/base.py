@@ -34,7 +34,7 @@ class AttackConfig(BaseModel):
     output_dataset_name: str = Field(..., description="Output dataset name")
 
     # Optional model info
-    model_version_id: Optional[str] = Field(None, description="Model version ID (if needed)")
+    detect_model_version_id: Optional[str] = Field(None, description="Model version ID (if needed)")
 
     # Common parameters
     targeted: bool = Field(False, description="Whether this is a targeted attack")

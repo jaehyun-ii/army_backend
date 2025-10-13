@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 async def upload_custom_model(
     *,
     db: AsyncSession = Depends(get_db),
-    model_name: str = Form(...),
+    detect_model_name: str = Form(...),
     version: str = Form(...),
     framework: str = Form(...),
     description: Optional[str] = Form(None),
@@ -49,7 +49,7 @@ async def upload_custom_model(
     - requirements_file: requirements.txt for dependencies
 
     Form data:
-    - model_name: Name of the model
+    - detect_model_name: Name of the model
     - version: Version string
     - framework: Framework (pytorch, tensorflow, onnx, etc.)
     - description: Optional description
@@ -77,7 +77,7 @@ async def upload_custom_model(
         # Upload model
         result = await custom_model_service.upload_model(
             db=db,
-            model_name=model_name,
+            model_name=detect_model_name,
             version=version,
             framework=framework,
             weights_file=weights_file.file,

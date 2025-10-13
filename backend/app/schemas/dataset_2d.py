@@ -125,7 +125,7 @@ class Patch2DBase(BaseModel):
 class Patch2DCreate(Patch2DBase):
     """Schema for creating 2D patch."""
 
-    target_model_version_id: UUID
+    target_detect_model_version_id: UUID
     source_dataset_id: Optional[UUID] = None
 
 
@@ -133,7 +133,7 @@ class Patch2DResponse(Patch2DBase):
     """Schema for 2D patch response."""
 
     id: UUID
-    target_model_version_id: UUID
+    target_detect_model_version_id: UUID
     source_dataset_id: Optional[UUID]
     created_by: Optional[UUID]
     created_at: datetime
@@ -145,7 +145,7 @@ class PatchGenerationRequest(BaseModel):
     """Schema for adversarial patch generation request."""
 
     patch_name: str = Field(..., min_length=1, max_length=200)
-    model_version_id: UUID
+    detect_model_version_id: UUID
     dataset_id: UUID
     target_class: str = Field(..., min_length=1)
     plugin_name: str = Field(default=settings.DEFAULT_PATCH_PLUGIN)
@@ -174,7 +174,7 @@ class AttackDataset2DBase(BaseModel):
 class AttackDataset2DCreate(AttackDataset2DBase):
     """Schema for creating 2D attack dataset."""
 
-    target_model_version_id: Optional[UUID] = None
+    target_detect_model_version_id: Optional[UUID] = None
     base_dataset_id: Optional[UUID] = None
     patch_id: Optional[UUID] = None
 
@@ -183,7 +183,7 @@ class AttackDataset2DResponse(AttackDataset2DBase):
     """Schema for 2D attack dataset response."""
 
     id: UUID
-    target_model_version_id: Optional[UUID]
+    target_detect_model_version_id: Optional[UUID]
     base_dataset_id: Optional[UUID]
     patch_id: Optional[UUID]
     created_by: Optional[UUID]

@@ -72,7 +72,7 @@ class RTCaptureRunCreate(RTCaptureRunBase):
     """Schema for creating RT capture run."""
 
     camera_id: UUID
-    model_version_id: UUID
+    detect_model_version_id: UUID
 
 
 class RTCaptureRunUpdate(BaseModel):
@@ -88,7 +88,7 @@ class RTCaptureRunResponse(RTCaptureRunBase):
 
     id: UUID
     camera_id: UUID
-    model_version_id: UUID
+    detect_model_version_id: UUID
     started_at: datetime
     ended_at: Optional[datetime]
     status: RTRunStatus
@@ -153,7 +153,7 @@ class RTInferenceCreate(RTInferenceBase):
     """Schema for creating RT inference."""
 
     frame_id: UUID
-    model_version_id: UUID
+    detect_model_version_id: UUID
 
 
 class RTInferenceUpdate(BaseModel):
@@ -168,7 +168,7 @@ class RTInferenceResponse(RTInferenceBase):
 
     id: UUID
     frame_id: UUID
-    model_version_id: UUID
+    detect_model_version_id: UUID
     created_at: datetime
     updated_at: datetime
 
