@@ -1,34 +1,9 @@
 version: '3.8'
 
 services:
-  # Backend API
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: army_backend
-    ports:
-      - "8000:8000"
-    environment:
-      - ENVIRONMENT=production
-      - DATABASE_URL=postgresql+asyncpg://adversarial:adversarial_password@db:5432/adversarial_vision
-      - SECRET_KEY=${SECRET_KEY:-please-change-this-in-production}
-      - STORAGE_ROOT=/app/storage
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
-      - LOG_LEVEL=INFO
-    volumes:
-      - ./backend/storage:/app/storage
-      - ./backend/logs:/app/logs
-    depends_on:
-      db:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - army_network
-
   # PostgreSQL Database
   db:
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     container_name: army_db
     environment:
       - POSTGRES_DB=adversarial_vision
