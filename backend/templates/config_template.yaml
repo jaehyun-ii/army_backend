@@ -1,0 +1,79 @@
+# Configuration template for custom object detection models
+#
+# This file must be uploaded as config.yaml along with your model weights and adapter.py
+#
+# Required fields are marked with (required)
+# Optional fields have default values or can be omitted
+
+# Model metadata (required)
+model_name: "My Custom Detector"  # (required) Name of your model
+version: "1.0"  # (required) Version string
+framework: "pytorch"  # (required) Framework: pytorch, tensorflow, onnx, tensorrt, openvino, or custom
+
+# Model input specification (required)
+input_size: [640, 640]  # (required) [width, height] - Input size for the model
+
+# Class names (required)
+class_names:
+  - person
+  - car
+  - bicycle
+  - dog
+  - cat
+  # Add all your class names here
+
+# Framework version (optional)
+framework_version: "2.0.0"  # PyTorch/TensorFlow version used for training
+
+# Weights file (optional, auto-detected if not specified)
+weights_file: "model.pt"  # Filename of the weights file (if you have multiple files)
+
+# Model loading parameters (optional)
+load_params:
+  device: "cuda"  # Device to load model on: cuda, cpu, or auto
+  half_precision: false  # Use FP16 for faster inference
+  # Add any other parameters your load_model() method needs
+
+# Inference parameters (optional, can be overridden at request time)
+inference_params:
+  conf_threshold: 0.25  # Default confidence threshold
+  iou_threshold: 0.45  # Default IOU threshold for NMS
+  max_detections: 100  # Maximum number of detections to return
+
+# Input preprocessing (optional, for documentation)
+preprocessing:
+  normalization: "0-1"  # How to normalize: "0-1", "-1-1", "imagenet", or "custom"
+  color_space: "RGB"  # RGB or BGR
+  # Any other preprocessing details
+
+# Model architecture info (optional, for documentation)
+architecture:
+  backbone: "ResNet50"
+  neck: "FPN"
+  head: "RetinaHead"
+  # Any other architecture details
+
+# Training metadata (optional, for documentation)
+training:
+  dataset: "COCO"
+  num_epochs: 100
+  batch_size: 16
+  learning_rate: 0.001
+  # Any other training details
+
+# Performance metrics (optional, for documentation)
+metrics:
+  mAP: 0.45
+  inference_time_ms: 15
+  model_size_mb: 100
+  # Any other metrics
+
+# Additional metadata (optional)
+metadata:
+  author: "Your Name"
+  description: "Brief description of your model"
+  license: "MIT"
+  tags:
+    - object-detection
+    - real-time
+  # Any other metadata you want to store

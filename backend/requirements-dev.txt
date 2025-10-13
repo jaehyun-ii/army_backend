@@ -1,0 +1,43 @@
+# Development and testing dependencies
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+httpx==0.25.2
+aiosqlite==0.19.0
+factory-boy==3.3.0
+faker==20.1.0
+
+# Code quality
+black==23.12.1
+isort==5.13.2
+flake8==7.0.0
+mypy==1.8.0
+pylint==3.0.3
+pre-commit==3.6.0
+
+# Documentation
+mkdocs==1.5.3
+mkdocs-material==9.5.3
+mkdocstrings[python]==0.24.0
+
+# Debugging
+ipython==8.19.0
+ipdb==0.13.13
+
+# Performance profiling
+py-spy==0.3.14
+memory-profiler==0.61.0
+
+# Security scanning
+bandit==1.7.6
+safety==3.0.1
+
+# Redis for testing
+redis==5.0.1
+fakeredis==2.20.1
+
+# Load testing
+locust==2.20.0

@@ -1,0 +1,382 @@
+{
+  "model": "YOLO11n",
+  "timestamp": "2025-09-26T17:26:04.707176",
+  "images": [
+    {
+      "filename": "10115254473_e8d1c62ca1_z.jpg",
+      "detections": [
+        {
+          "bbox": {
+            "x1": 180.36,
+            "y1": 178.28,
+            "x2": 553.35,
+            "y2": 426.67
+          },
+          "class": "motorcycle",
+          "class_id": 3,
+          "confidence": 0.89
+        },
+        {
+          "bbox": {
+            "x1": 426.3,
+            "y1": 61.74,
+            "x2": 517.72,
+            "y2": 201.78
+          },
+          "class": "person",
+          "class_id": 0,
+          "confidence": 0.7534
+        },
+        {
+          "bbox": {
+            "x1": 328.88,
+            "y1": 44.07,
+            "x2": 458.83,
+            "y2": 221.35
+          },
+          "class": "person",
+          "class_id": 0,
+          "confidence": 0.7364
+        }
+      ]
+    },
+    {
+      "filename": "220745402_0a86f7ee6c_z.jpg",
+      "detections": [
+        {
+          "bbox": {
+            "x1": 3.5,
+            "y1": 172.1,
+            "x2": 157.28,
+            "y2": 490.64
+          },
+          "class": "person",
+          "class_id": 0,
+          "confidence": 0.9183
+        },
+        {
+          "bbox": {
+            "x1": 145.96,
+            "y1": 328.15,
+            "x2": 195.02,
+            "y2": 416.08
+          },
+          "class": "suitcase",
+          "class_id": 28,
+          "confidence": 0.7923
+        }
+      ]
+    },
+    {
+      "filename": "2294115563_ca1167489b_z.jpg",
+      "detections": [
+        {
+          "bbox": {
+            "x1": 1.14,
+            "y1": 3.26,
+            "x2": 258.14,
+            "y2": 613.4
+          },
+          "class": "person",
+          "class_id": 0,
+          "confidence": 0.9005
+        },
+        {
+          "bbox": {
+            "x1": 187.92,
+            "y1": 92.38,
+            "x2": 408.14,
+            "y2": 437.24
+          },
+          "class": "person",
+          "class_id": 0,
+          "confidence": 0.7295
+        },
+        {
+          "bbox": {
+            "x1": 197.87,
+            "y1": 476.76,
+            "x2": 249.87,
+            "y2": 525.0
+          },
+          "class": "bottle",
+          "class_id": 39,
+          "confidence": 0.2708
+        }
+      ]
+    },
+    {
+      "filename": "2511329407_0416946426_z.jpg",
+      "detections": [
+        {
+          "bbox": {
+            "x1": 521.58,
+            "y1": 80.37,
+            "x2": 639.44,
+            "y2": 375.94
+          },
+          "class": "oven",
+          "class_id": 69,
+          "confidence": 0.8793
+        },
+        {
+          "bbox": {
+            "x1": 63.05,
+            "y1": 1.94,
+            "x2": 532.58,
+            "y2": 423.27
+          },
+          "class": "person",
+          "class_id": 0,
+          "confidence": 0.8745
+        },
+        {
+          "bbox": {
+            "x1": 0.16,
+            "y1": 183.3,
+            "x2": 195.0,
+            "y2": 336.09
+          },
+          "class": "sink",
+          "class_id": 71,
+          "confidence": 0.7926
+        },
+        {
+          "bbox": {
+            "x1": 137.5,
+            "y1": 27.66,
+            "x2": 249.21,
+            "y2": 124.19
+          },
+          "class": "microwave",
+          "class_id": 68,
+          "confidence": 0.7115
+        },
+        {
+          "bbox": {
+            "x1": 332.38,
+            "y1": 54.17,
+            "x2": 377.95,
+            "y2": 163.54
+          },
+          "class": "cell phone",
+          "class_id": 67,
+          "confidence": 0.3471
+        },
+        {
+          "bbox": {
+            "x1": 73.13,
+            "y1": 122.22,
+            "x2": 94.42,
+            "y2": 192.59
+          },
+          "class": "bottle",
+          "class_id": 39,
+          "confidence": 0.2899
+        },
+        {
+          "bbox": {
+            "x1": 301.13,
+            "y1": 55.53,
+            "x2": 378.22,
+            "y2": 178.52
+          },
+          "class": "cell phone",
+          "class_id": 67,
+          "confidence": 0.256
+        }
+      ]
+    },
+    {
+      "filename": "2815066187_be6a7abac9_z.jpg",
+      "detections": [
+        {
+          "bbox": {
+            "x1": 23.19,
+            "y1": 209.61,
+            "x2": 336.26,
+            "y2": 423.76
+          },
+          "class": "person",
+          "class_id": 0,
+          "confidence": 0.9397
+        },
+        {
+          "bbox": {
+            "x1": 61.41,
+            "y1": 265.65,
+            "x2": 83.57,
+            "y2": 327.36
+          },
+          "class": "person",
+          "class_id": 0,
+          "confidence": 0.8014
+        },
+        {
+          "bbox": {
+            "x1": 191.29,
+            "y1": 0.0,
+            "x2": 330.47,
+            "y2": 108.07
+          },
+          "class": "traffic light",
+          "class_id": 9,
+          "confidence": 0.5788
+        },
+        {
+          "bbox": {
+            "x1": 191.29,
+            "y1": 0.0,
+            "x2": 290.81,
+            "y2": 67.07
+          },
+          "class": "traffic light",
+          "class_id": 9,
+          "confidence": 0.3919
+        },
+        {
+          "bbox": {
+            "x1": 281.54,
+            "y1": 196.62,
+            "x2": 338.73,
+            "y2": 293.84
+          },
+          "class": "traffic light",
+          "class_id": 9,
+          "confidence": 0.3897
+        },
+        {
+          "bbox": {
+            "x1": 275.1,
+            "y1": 147.51,
+            "x2": 338.82,
+            "y2": 332.58
+          },
+          "class": "traffic light",
+          "class_id": 9,
+          "confidence": 0.3789
+        },
+        {
+          "bbox": {
+            "x1": 587.2,
+            "y1": 188.99,
+            "x2": 616.5,
+            "y2": 217.15
+          },
+          "class": "stop sign",
+          "class_id": 11,
+          "confidence": 0.2779
+        },
+        {
+          "bbox": {
+            "x1": 582.07,
+            "y1": 278.49,
+            "x2": 631.85,
+            "y2": 294.62
+          },
+          "class": "car",
+          "class_id": 2,
+          "confidence": 0.2559
+        }
+      ]
+    },
+    {
+      "filename": "3320145327_3918b142d1_z.jpg",
+      "detections": [
+        {
+          "bbox": {
+            "x1": 279.8,
+            "y1": 108.69,
+            "x2": 385.57,
+            "y2": 401.19
+          },
+          "class": "person",
+          "class_id": 0,
+          "confidence": 0.9099
+        }
+      ]
+    },
+    {
+      "filename": "334371308_c1ea93fdbd_z.jpg",
+      "detections": [
+        {
+          "bbox": {
+            "x1": 0.26,
+            "y1": 159.14,
+            "x2": 98.45,
+            "y2": 360.06
+          },
+          "class": "refrigerator",
+          "class_id": 72,
+          "confidence": 0.9509
+        },
+        {
+          "bbox": {
+            "x1": 227.17,
+            "y1": 137.15,
+            "x2": 364.21,
+            "y2": 372.76
+          },
+          "class": "person",
+          "class_id": 0,
+          "confidence": 0.9135
+        },
+        {
+          "bbox": {
+            "x1": 312.77,
+            "y1": 247.14,
+            "x2": 338.14,
+            "y2": 279.07
+          },
+          "class": "cup",
+          "class_id": 41,
+          "confidence": 0.7484
+        },
+        {
+          "bbox": {
+            "x1": 12.61,
+            "y1": 309.62,
+            "x2": 28.9,
+            "y2": 367.78
+          },
+          "class": "bottle",
+          "class_id": 39,
+          "confidence": 0.6432
+        },
+        {
+          "bbox": {
+            "x1": 351.43,
+            "y1": 163.72,
+            "x2": 434.85,
+            "y2": 237.62
+          },
+          "class": "tv",
+          "class_id": 62,
+          "confidence": 0.5045
+        },
+        {
+          "bbox": {
+            "x1": 328.24,
+            "y1": 343.54,
+            "x2": 365.61,
+            "y2": 375.0
+          },
+          "class": "cup",
+          "class_id": 41,
+          "confidence": 0.4871
+        },
+        {
+          "bbox": {
+            "x1": 351.71,
+            "y1": 163.58,
+            "x2": 434.87,
+            "y2": 237.38
+          },
+          "class": "microwave",
+          "class_id": 68,
+          "confidence": 0.4048
+        }
+      ]
+    }
+  ]
+}
