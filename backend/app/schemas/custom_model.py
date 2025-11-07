@@ -1,15 +1,41 @@
 """
 Schemas for custom model upload and management.
 """
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, ConfigDict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from uuid import UUID
 
 
+class ModelFolderParseResponse(BaseModel):
+    """Response schema for model folder parsing."""
+    model_config = ConfigDict(protected_namespaces=())
+
+    is_valid: bool
+    model_name: str
+    version: str
+    framework: str
+    class_names: List[str]
+    input_size: List[int]
+    num_classes: int
+    has_weights: bool
+    has_config: bool
+    has_adapter: bool
+    weights_filename: Optional[str] = None
+    description: Optional[str] = None
+    framework_version: Optional[str] = None
+    author: Optional[str] = None
+    license: Optional[str] = None
+    metrics: Optional[Dict[str, Any]] = None
+    architecture: Optional[Dict[str, Any]] = None
+    validation_errors: List[str] = Field(default_factory=list)
+
+
 class ModelUploadRequest(BaseModel):
     """Request schema for uploading custom model."""
-    detect_model_name: str = Field(..., min_length=1, max_length=200)
+    model_config = ConfigDict(protected_namespaces=())
+
+    model_name: str = Field(..., min_length=1, max_length=200)
     version: str = Field(..., min_length=1, max_length=64)
     description: Optional[str] = None
     framework: str = Field(..., description="Model framework (pytorch, tensorflow, onnx, etc.)")
@@ -17,9 +43,11 @@ class ModelUploadRequest(BaseModel):
 
 class ModelUploadResponse(BaseModel):
     """Response schema for model upload."""
-    detect_model_id: UUID
-    version_id: UUID
-    upload_status: str
+    model_config = ConfigDict(protected_namespaces=())
+
+    model_id: str
+    version_id: str
+    status: str
     message: str
 
 
@@ -39,11 +67,11 @@ class ModelInferenceRequest(BaseModel):
 
 
 class BoundingBoxResponse(BaseModel):
-    """Bounding box in response."""
-    x1: float
-    y1: float
-    x2: float
-    y2: float
+    """Bounding box in YOLO normalized format (0-1)."""
+    x_center: float
+    y_center: float
+    width: float
+    height: float
 
 
 class DetectionResponse(BaseModel):
@@ -58,13 +86,15 @@ class ModelInferenceResponse(BaseModel):
     """Response schema for model inference."""
     detections: List[DetectionResponse]
     inference_time_ms: Optional[float] = None
-    detect_model_info: Dict[str, Any] = Field(default_factory=dict)
+    model_info: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ModelListResponse(BaseModel):
     """Response schema for listing custom models."""
-    detect_model_id: str
-    detect_model_name: str
+    model_config = ConfigDict(protected_namespaces=())
+
+    model_id: str
+    model_name: str
     version: str
     framework: str
     is_loaded: bool
@@ -74,8 +104,10 @@ class ModelListResponse(BaseModel):
 
 class ModelInfoResponse(BaseModel):
     """Detailed model information."""
-    detect_model_id: str
-    detect_model_name: str
+    model_config = ConfigDict(protected_namespaces=())
+
+    model_id: str
+    model_name: str
     version: str
     framework: str
     is_loaded: bool

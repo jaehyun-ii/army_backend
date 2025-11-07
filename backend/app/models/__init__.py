@@ -1,15 +1,17 @@
 """
-SQLAlchemy ORM models.
+SQLAlchemy ORM models (aligned with database schema).
+Removed models: Camera, RTInference, InferenceMetadata, ImageDetection, DatasetClassStatistics
+These tables do not exist in the database schema.
 """
 from app.models.user import User
 from app.models.dataset_2d import Dataset2D, Image2D, Patch2D, AttackDataset2D
-from app.models.realtime import Camera, RTCaptureRun, RTFrame, RTInference
+from app.models.dataset_3d import Dataset3D, Image3D
+from app.models.realtime import RTCaptureRun, RTFrame
 from app.models.model_repo import (
     ODModel,
-    ODModelVersion,
-    ODModelClass,
     ODModelArtifact,
-    ODModelDeployment,
+    # ODModelClass,  # Removed - use od_models.labelmap instead
+    # ODModelDeployment,  # Disabled - table not in use
 )
 from app.models.audit import AuditLog
 from app.models.evaluation import (
@@ -20,27 +22,22 @@ from app.models.evaluation import (
     EvalListItem,
 )
 from app.models.experiment import Experiment
-from app.models.inference import (
-    InferenceMetadata,
-    ImageDetection,
-    DatasetClassStatistics,
-)
+from app.models.annotation import Annotation, AnnotationType
 
 __all__ = [
     "User",
     "Dataset2D",
     "Image2D",
+    "Dataset3D",
+    "Image3D",
     "Patch2D",
     "AttackDataset2D",
-    "Camera",
     "RTCaptureRun",
     "RTFrame",
-    "RTInference",
     "ODModel",
-    "ODModelVersion",
-    "ODModelClass",
     "ODModelArtifact",
-    "ODModelDeployment",
+    # "ODModelClass",  # Removed - use od_models.labelmap instead
+    # "ODModelDeployment",  # Disabled - table not in use
     "AuditLog",
     "EvalRun",
     "EvalItem",
@@ -48,7 +45,6 @@ __all__ = [
     "EvalList",
     "EvalListItem",
     "Experiment",
-    "InferenceMetadata",
-    "ImageDetection",
-    "DatasetClassStatistics",
+    "Annotation",
+    "AnnotationType",
 ]

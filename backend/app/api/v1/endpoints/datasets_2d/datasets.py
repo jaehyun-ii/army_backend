@@ -82,3 +82,40 @@ async def delete_dataset(
         )
 
     await crud.dataset_2d.soft_delete(db, id=dataset_id)
+
+
+@router.get("/{dataset_id}/images", response_model=List[schemas.ImageResponse])
+async def get_dataset_images(
+    dataset_id: UUID,
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+) -> List[schemas.ImageResponse]:
+    """Get images from a dataset."""
+    # Check if dataset exists
+    dataset = await crud.dataset_2d.get(db, id=dataset_id)
+    if not dataset:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Dataset with ID {dataset_id} not found",
+        )
+
+    # Get images
+    images = await crud.image_2d.get_by_dataset(db, dataset_id=dataset_id, skip=skip, limit=limit)
+    return images
+
+
+@router.delete("/images/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_image(
+    image_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Soft delete an image by ID."""
+    image = await crud.image_2d.get(db, id=image_id)
+    if not image:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Image with ID {image_id} not found",
+        )
+
+    await crud.image_2d.soft_delete(db, id=image_id)

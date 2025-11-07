@@ -4,6 +4,8 @@ Authentication service for handling login and token generation.
 This service centralizes authentication business logic, eliminating
 code duplication between /login and /login-json endpoints.
 
+ALIGNED WITH DATABASE SCHEMA: Uses username as primary identifier.
+
 SOLID Principles:
 - SRP: Single responsibility - authentication and token generation
 - DIP: Depends on abstractions (CRUD, security functions)
@@ -18,6 +20,13 @@ from app.core.exceptions import UnauthorizedError, ForbiddenError
 from app.core.security import create_access_token
 from app.crud.user import authenticate_user
 from app.schemas.user import Token
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import jwt, JWTError
+
+from app.database import get_db
+from app.crud import user as crud_user
+from app.models.user import User
 
 
 class AuthService:
@@ -25,20 +34,21 @@ class AuthService:
     Service for user authentication and token management.
 
     Centralizes authentication logic to avoid duplication across endpoints.
+    Uses username as primary identifier (aligned with DB schema).
     """
 
     async def authenticate_and_create_token(
         self,
         db: AsyncSession,
-        email: str,
+        username: str,
         password: str,
     ) -> Token:
         """
-        Authenticate user and create access token.
+        Authenticate user and create access token (using username).
 
         Args:
             db: Database session
-            email: User email
+            username: Username (primary identifier in DB schema)
             password: User password
 
         Returns:
@@ -50,24 +60,29 @@ class AuthService:
 
         Example:
             token = await auth_service.authenticate_and_create_token(
-                db, "user@example.com", "password123"
+                db, "john_doe", "password123"
             )
         """
-        # Step 1: Authenticate user
-        user = await authenticate_user(db, email, password)
+        # Step 1: Authenticate user by username
+        user = await authenticate_user(db, username, password)
         if not user:
-            raise UnauthorizedError(detail="Incorrect email or password")
+            raise UnauthorizedError(detail="Incorrect username or password")
 
         # Step 2: Check if user is active
         if not user.is_active:
             raise ForbiddenError(detail="Inactive user")
 
-        # Step 3: Create access token
+        # Step 3: Create access token with user information
         access_token_expires = timedelta(
             minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
         )
         access_token = create_access_token(
-            data={"sub": user.email},
+            data={
+                "sub": str(user.id),  # Use user ID as subject
+                "username": user.username,
+                "email": user.email,
+                "role": user.role,
+            },
             expires_delta=access_token_expires
         )
 
@@ -91,3 +106,40 @@ class AuthService:
 
 # Global service instance
 auth_service = AuthService()
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_PREFIX}/auth/login")
+
+async def get_current_user(
+    db: AsyncSession = Depends(get_db),
+    token: str = Depends(oauth2_scheme)
+) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        username: str = payload.get("username")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    
+    user = await crud_user.get_user_by_username(db, username=username)
+    if user is None:
+        raise credentials_exception
+    return user
+
+async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
+    if not current_user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+async def get_current_active_admin(current_user: User = Depends(get_current_active_user)) -> User:
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The user doesn't have enough privileges"
+        )
+    return current_user

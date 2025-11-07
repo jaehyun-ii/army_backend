@@ -1,5 +1,6 @@
 """
-User schemas.
+User schemas (aligned with database schema).
+DB requires: username (NOT NULL, unique), email (nullable), password_hash
 """
 from pydantic import BaseModel, EmailStr, ConfigDict
 from typing import Optional
@@ -10,10 +11,10 @@ from app.models.user import UserRole
 
 
 class UserBase(BaseModel):
-    """Base user schema."""
+    """Base user schema (aligned with DB schema)."""
 
-    email: EmailStr
-    display_name: Optional[str] = None
+    username: str  # DB: NOT NULL, unique
+    email: Optional[EmailStr] = None  # DB: nullable
     role: UserRole = UserRole.USER
 
 
@@ -24,17 +25,17 @@ class UserCreate(UserBase):
 
 
 class UserLogin(BaseModel):
-    """Schema for user login."""
+    """Schema for user login (using username)."""
 
-    email: EmailStr
+    username: str  # Changed from email to username
     password: str
 
 
 class UserUpdate(BaseModel):
     """Schema for updating a user."""
 
+    username: Optional[str] = None
     email: Optional[EmailStr] = None
-    display_name: Optional[str] = None
     password: Optional[str] = None
     is_active: Optional[bool] = None
 

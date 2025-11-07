@@ -1,7 +1,7 @@
 """
 Pydantic schemas for evaluation endpoints.
 """
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import Optional, Dict, Any, List, Union
 from datetime import datetime
 from uuid import UUID
@@ -23,27 +23,19 @@ class EvalPhase(str, Enum):
     POST_ATTACK = "post_attack"
 
 
-class DatasetDimension(str, Enum):
-    """Dataset dimension."""
-    TWO_D = "2d"
-    THREE_D = "3d"
-
-
 # ========== Evaluation Run Schemas ==========
 
 class EvalRunBase(BaseModel):
-    """Base schema for evaluation run."""
+    """Base schema for evaluation run (aligned with DB model)."""
+    model_config = ConfigDict(protected_namespaces=())
+
     name: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
     phase: EvalPhase
-    detect_model_version_id: UUID
-    dataset_dimension: DatasetDimension = DatasetDimension.TWO_D
-    # 2D datasets
+    model_id: UUID
+    # 2D datasets only (3D removed, dimension inferred from which dataset_id fields are set)
     base_dataset_id: Optional[UUID] = None
     attack_dataset_id: Optional[UUID] = None
-    # 3D datasets
-    base_dataset_3d_id: Optional[UUID] = None
-    attack_dataset_3d_id: Optional[UUID] = None
     # Experiment linkage
     experiment_id: Optional[UUID] = None
     params: Optional[Dict[str, Any]] = Field(None, description="Evaluation parameters (threshold, NMS, IoU, etc.)")
@@ -84,7 +76,7 @@ class EvalRunResponse(EvalRunBase):
     updated_at: datetime
     deleted_at: Optional[datetime] = None
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 class EvalRunListResponse(BaseModel):
@@ -98,10 +90,9 @@ class EvalRunListResponse(BaseModel):
 # ========== Evaluation Item Schemas ==========
 
 class EvalItemBase(BaseModel):
-    """Base schema for evaluation item."""
+    """Base schema for evaluation item (2D only)."""
     run_id: UUID
     image_2d_id: Optional[UUID] = None
-    image_3d_id: Optional[UUID] = None
     file_name: Optional[str] = Field(None, max_length=1024)
     storage_key: Optional[str] = None
     ground_truth: Optional[Union[Dict[str, Any], List[Any]]] = Field(None, description="GT bounding boxes/classes")
@@ -130,7 +121,7 @@ class EvalItemResponse(EvalItemBase):
     updated_at: datetime
     deleted_at: Optional[datetime] = None
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 class EvalItemListResponse(BaseModel):
@@ -174,7 +165,7 @@ class EvalClassMetricsResponse(EvalClassMetricsBase):
     updated_at: datetime
     deleted_at: Optional[datetime] = None
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 class EvalClassMetricsListResponse(BaseModel):
@@ -210,7 +201,7 @@ class EvalListResponse(EvalListBase):
     updated_at: datetime
     deleted_at: Optional[datetime] = None
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 class EvalListWithItemsResponse(EvalListResponse):
@@ -251,16 +242,18 @@ class EvalListItemResponse(EvalListItemBase):
     created_at: datetime
     deleted_at: Optional[datetime] = None
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
 
 
 # ========== Comparison Schemas ==========
 
 class EvalRunPairResponse(BaseModel):
-    """Schema for pre/post evaluation run pair comparison."""
+    """Schema for pre/post evaluation run pair comparison (aligned with DB model)."""
+    model_config = ConfigDict(protected_namespaces=())
+
     pre_run_id: UUID
     post_run_id: UUID
-    detect_model_version_id: UUID
+    model_id: UUID
     base_dataset_id: UUID
     attack_dataset_id: UUID
     pre_metrics: Optional[Dict[str, Any]] = None

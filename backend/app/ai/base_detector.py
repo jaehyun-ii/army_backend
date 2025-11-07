@@ -1,134 +1,154 @@
 """
-Base interface for object detection models.
+Base detector interface - Legacy support for old custom model system.
 
-This module defines the standard interface that all custom object detection models
-must implement to integrate with the system.
+NOTE: This module is deprecated. Use ART estimators instead:
+- app.ai.estimators.object_detection.PyTorchYolo
+- app.ai.estimators.object_detection.PyTorchRTDETR
+- app.ai.estimators.object_detection.PyTorchFasterRCNN
+
+This file exists only for backward compatibility with old code that
+imports DetectionResult and BaseObjectDetector.
 """
-from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Tuple
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 import numpy as np
-from pydantic import BaseModel, Field
+from abc import ABC, abstractmethod
 
 
-class BoundingBox(BaseModel):
-    """Bounding box representation."""
-    x1: float = Field(..., description="Top-left x coordinate")
-    y1: float = Field(..., description="Top-left y coordinate")
-    x2: float = Field(..., description="Bottom-right x coordinate")
-    y2: float = Field(..., description="Bottom-right y coordinate")
+@dataclass
+class BoundingBox:
+    """Bounding box for object detection."""
+    x1: float
+    y1: float
+    x2: float
+    y2: float
 
-    def to_dict(self) -> Dict[str, float]:
-        """Convert to dictionary."""
-        return {"x1": self.x1, "y1": self.y1, "x2": self.x2, "y2": self.y2}
+    def to_xyxy(self) -> Tuple[float, float, float, float]:
+        """Return (x1, y1, x2, y2) format."""
+        return (self.x1, self.y1, self.x2, self.y2)
 
-
-class Detection(BaseModel):
-    """Single detection result."""
-    bbox: BoundingBox = Field(..., description="Bounding box")
-    class_id: int = Field(..., description="Class ID")
-    class_name: str = Field(..., description="Class name")
-    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score")
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
-        return {
-            "bbox": self.bbox.to_dict(),
-            "class_id": self.class_id,
-            "class_name": self.class_name,
-            "confidence": self.confidence
-        }
+    def to_xywh(self) -> Tuple[float, float, float, float]:
+        """Return (x, y, width, height) format."""
+        width = self.x2 - self.x1
+        height = self.y2 - self.y1
+        return (self.x1, self.y1, width, height)
 
 
-class DetectionResult(BaseModel):
-    """Detection results for an image."""
-    detections: List[Detection] = Field(default_factory=list)
+@dataclass
+class Detection:
+    """Single object detection result."""
+    bbox: BoundingBox
+    confidence: float
+    class_id: int
+    class_name: str
+
+
+@dataclass
+class DetectionResult:
+    """Object detection result containing multiple detections."""
+    detections: List[Detection]
+    image_shape: Tuple[int, int, int]  # (height, width, channels)
     inference_time_ms: Optional[float] = None
-    metadata: Dict[str, Any] = Field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary."""
-        return {
-            "detections": [d.to_dict() for d in self.detections],
-            "inference_time_ms": self.inference_time_ms,
-            "metadata": self.metadata
-        }
+    @property
+    def num_detections(self) -> int:
+        """Number of detected objects."""
+        return len(self.detections)
+
+    def filter_by_confidence(self, threshold: float) -> "DetectionResult":
+        """Filter detections by confidence threshold."""
+        filtered = [d for d in self.detections if d.confidence >= threshold]
+        return DetectionResult(
+            detections=filtered,
+            image_shape=self.image_shape,
+            inference_time_ms=self.inference_time_ms,
+        )
+
+    def filter_by_class(self, class_ids: List[int]) -> "DetectionResult":
+        """Filter detections by class IDs."""
+        filtered = [d for d in self.detections if d.class_id in class_ids]
+        return DetectionResult(
+            detections=filtered,
+            image_shape=self.image_shape,
+            inference_time_ms=self.inference_time_ms,
+        )
 
 
 class BaseObjectDetector(ABC):
     """
-    Base abstract class for object detection models.
+    Base class for object detection models.
 
-    All custom models must inherit from this class and implement the required methods.
+    DEPRECATED: Use ART estimators instead.
+    This class exists only for backward compatibility.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict):
         """
-        Initialize the detector.
+        Initialize detector with config.
 
         Args:
-            config: Configuration dictionary loaded from config.yaml
+            config: Configuration dictionary
         """
         self.config = config
-        self.model = None
-        self.class_names: List[str] = []
         self.is_loaded = False
+        self.class_names = config.get('class_names', [])
 
     @abstractmethod
     def load_model(self, weights_path: str, **kwargs) -> None:
         """
-        Load the model from weights file.
+        Load model from weights file.
 
         Args:
-            weights_path: Path to the model weights file
-            **kwargs: Additional arguments from config
+            weights_path: Path to model weights
+            **kwargs: Additional arguments
         """
         pass
 
     @abstractmethod
-    def preprocess(self, image: np.ndarray) -> Any:
+    def preprocess(self, image: np.ndarray) -> np.ndarray:
         """
-        Preprocess the input image.
+        Preprocess input image.
 
         Args:
-            image: Input image as numpy array (H, W, C) in BGR format
+            image: Input image as numpy array (H, W, C)
 
         Returns:
-            Preprocessed image in model-specific format
+            Preprocessed image
         """
         pass
 
     @abstractmethod
-    def predict(self, preprocessed_input: Any) -> Any:
+    def predict(self, preprocessed_image: np.ndarray) -> np.ndarray:
         """
-        Run inference on preprocessed input.
+        Run model inference.
 
         Args:
-            preprocessed_input: Preprocessed image from preprocess()
+            preprocessed_image: Preprocessed image
 
         Returns:
-            Raw model output
+            Raw model predictions
         """
         pass
 
     @abstractmethod
     def postprocess(
         self,
-        model_output: Any,
-        original_shape: Tuple[int, int],
+        predictions: np.ndarray,
+        original_shape: Tuple[int, int, int],
         conf_threshold: float = 0.25,
-        iou_threshold: float = 0.45
+        iou_threshold: float = 0.45,
     ) -> DetectionResult:
         """
-        Postprocess model output to detection results.
+        Postprocess model predictions.
 
         Args:
-            model_output: Raw model output from predict()
-            original_shape: Original image shape (height, width)
-            conf_threshold: Confidence threshold for filtering detections
+            predictions: Raw model predictions
+            original_shape: Original image shape (H, W, C)
+            conf_threshold: Confidence threshold
             iou_threshold: IOU threshold for NMS
 
         Returns:
-            DetectionResult object
+            DetectionResult with filtered detections
         """
         pass
 
@@ -136,57 +156,29 @@ class BaseObjectDetector(ABC):
         self,
         image: np.ndarray,
         conf_threshold: float = 0.25,
-        iou_threshold: float = 0.45
+        iou_threshold: float = 0.45,
     ) -> DetectionResult:
         """
-        Perform end-to-end object detection.
+        End-to-end detection pipeline.
 
         Args:
-            image: Input image as numpy array (H, W, C) in BGR format
+            image: Input image as numpy array (H, W, C)
             conf_threshold: Confidence threshold
             iou_threshold: IOU threshold for NMS
 
         Returns:
-            DetectionResult object
+            DetectionResult with detections
         """
-        import time
-
         if not self.is_loaded:
             raise RuntimeError("Model not loaded. Call load_model() first.")
 
-        original_shape = image.shape[:2]
-        start_time = time.time()
-
-        # Run detection pipeline
+        original_shape = image.shape
         preprocessed = self.preprocess(image)
-        output = self.predict(preprocessed)
-        result = self.postprocess(output, original_shape, conf_threshold, iou_threshold)
-
-        # Add inference time
-        inference_time = (time.time() - start_time) * 1000
-        result.inference_time_ms = inference_time
-
+        predictions = self.predict(preprocessed)
+        result = self.postprocess(
+            predictions,
+            original_shape,
+            conf_threshold,
+            iou_threshold,
+        )
         return result
-
-    def get_model_info(self) -> Dict[str, Any]:
-        """
-        Get model information.
-
-        Returns:
-            Dictionary with model metadata
-        """
-        return {
-            "class_names": self.class_names,
-            "num_classes": len(self.class_names),
-            "is_loaded": self.is_loaded,
-            "config": self.config
-        }
-
-    def set_class_names(self, class_names: List[str]) -> None:
-        """
-        Set class names for the model.
-
-        Args:
-            class_names: List of class names
-        """
-        self.class_names = class_names

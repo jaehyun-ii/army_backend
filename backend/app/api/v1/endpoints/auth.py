@@ -24,14 +24,15 @@ async def register(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Register a new user.
+    Register a new user (using username as unique identifier).
     """
-    # Check if user already exists
-    existing_user = await get_user_by_email(db, user_create.email)
+    # Check if username already exists
+    from app.crud.user import get_user_by_username
+    existing_user = await get_user_by_username(db, user_create.username)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
+            detail="Username already registered"
         )
 
     # Create new user
@@ -61,10 +62,10 @@ async def login_json(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Login with JSON body and get access token.
+    Login with JSON body and get access token (using username).
 
     Uses AuthService for authentication business logic.
     """
     return await auth_service.authenticate_and_create_token(
-        db, user_login.email, user_login.password
+        db, user_login.username, user_login.password
     )

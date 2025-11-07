@@ -26,7 +26,8 @@ class StorageManager:
             from app.core.config import settings
             base_storage_path = settings.STORAGE_ROOT
 
-        self.base_path = Path(base_storage_path) / "datasets"
+        self.storage_root = Path(base_storage_path)
+        self.base_path = self.storage_root / "datasets"
         self.base_path.mkdir(parents=True, exist_ok=True)
 
     def save_dataset_folder(
@@ -126,8 +127,8 @@ class StorageManager:
                 if file_path.suffix.lower() in image_extensions:
                     # Get relative path from dataset root
                     relative_path = file_path.relative_to(dataset_path)
-                    # Include "datasets/" prefix in storage_key
-                    storage_key = f"datasets/{dataset_folder_name}/{relative_path}"
+                    # Use relative path from STORAGE_ROOT for storage_key
+                    storage_key = str(file_path.relative_to(self.storage_root))
 
                     # Get image dimensions
                     width, height = None, None

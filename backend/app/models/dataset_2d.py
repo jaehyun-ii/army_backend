@@ -34,11 +34,10 @@ class Dataset2D(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     deleted_at = Column(DateTime(timezone=True))
 
-    # Relationships
+    # Relationships (aligned with existing models only)
     images = relationship("Image2D", back_populates="dataset", lazy="selectin")
     attack_datasets = relationship("AttackDataset2D", back_populates="base_dataset")
-    inference_metadata = relationship("InferenceMetadata", back_populates="dataset", uselist=False)
-    class_statistics = relationship("DatasetClassStatistics", back_populates="dataset")
+    # Removed: inference_metadata, class_statistics (tables don't exist in DB schema)
 
     __table_args__ = (
         CheckConstraint("char_length(name) > 0", name="chk_datasets_2d_name"),
@@ -64,9 +63,9 @@ class Image2D(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     deleted_at = Column(DateTime(timezone=True))
 
-    # Relationships
+    # Relationships (aligned with existing models only)
     dataset = relationship("Dataset2D", back_populates="images")
-    detections = relationship("ImageDetection", back_populates="image")
+    annotations = relationship("Annotation", back_populates="image_2d")
 
     __table_args__ = (
         CheckConstraint(
@@ -85,8 +84,8 @@ class Patch2D(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(200), nullable=False)
     description = Column(Text)
-    target_model_version_id = Column(
-        UUID(as_uuid=True), ForeignKey("od_model_versions.id", ondelete="RESTRICT"), nullable=False
+    target_model_id = Column(
+        UUID(as_uuid=True), ForeignKey("od_models.id", ondelete="RESTRICT"), nullable=True  # DB: NULL allowed
     )
     source_dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets_2d.id", ondelete="SET NULL"))
     target_class = Column(String(200))
@@ -122,10 +121,10 @@ class AttackDataset2D(Base):
     name = Column(String(200), nullable=False)
     description = Column(Text)
     attack_type = Column(SQLEnum(AttackType, name="attack_type_enum", values_callable=lambda x: [e.value for e in x]), nullable=False)
-    target_model_version_id = Column(
-        UUID(as_uuid=True), ForeignKey("od_model_versions.id", ondelete="RESTRICT")
+    target_model_id = Column(
+        UUID(as_uuid=True), ForeignKey("od_models.id", ondelete="RESTRICT"), nullable=True  # DB: NULL allowed
     )
-    base_dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets_2d.id", ondelete="RESTRICT"))
+    base_dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets_2d.id", ondelete="RESTRICT"), nullable=False)  # DB: NOT NULL
     target_class = Column(String(200))
     patch_id = Column(UUID(as_uuid=True), ForeignKey("patches_2d.id", ondelete="RESTRICT"))
     parameters = Column(JSONB)

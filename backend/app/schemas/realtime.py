@@ -1,5 +1,6 @@
 """
-Real-time performance measurement schemas.
+Real-time performance measurement schemas (aligned with database schema).
+Removed: Camera, RTInference (tables do not exist in DB schema)
 """
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, Dict, Any
@@ -10,57 +11,9 @@ from decimal import Decimal
 from app.models.realtime import RTRunStatus
 
 
-# Camera
-class CameraBase(BaseModel):
-    """Base camera schema."""
-
-    name: str
-    description: Optional[str] = None
-    stream_uri: Optional[str] = None
-    location: Optional[Dict[str, Any]] = None
-    resolution: Optional[Dict[str, Any]] = None
-    metadata: Optional[Dict[str, Any]] = None
-    is_active: bool = True
-
-
-class CameraCreate(CameraBase):
-    """Schema for creating camera."""
-
-    pass
-
-
-class CameraUpdate(BaseModel):
-    """Schema for updating camera."""
-
-    name: Optional[str] = None
-    description: Optional[str] = None
-    stream_uri: Optional[str] = None
-    location: Optional[Dict[str, Any]] = None
-    resolution: Optional[Dict[str, Any]] = None
-    metadata: Optional[Dict[str, Any]] = None
-    is_active: Optional[bool] = None
-
-
-class CameraResponse(BaseModel):
-    """Schema for camera response."""
-
-    id: UUID
-    name: str
-    description: Optional[str] = None
-    stream_uri: Optional[str] = None
-    location: Optional[Dict[str, Any]] = None
-    resolution: Optional[Dict[str, Any]] = None
-    metadata: Optional[Dict[str, Any]] = Field(default=None, validation_alias="metadata_")
-    is_active: bool = True
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
-
-
 # RT Capture Run
 class RTCaptureRunBase(BaseModel):
-    """Base RT capture run schema."""
+    """Base RT capture run schema (aligned with DB schema - no camera_id)."""
 
     window_seconds: int = 5
     frames_expected: int = 10
@@ -69,10 +22,10 @@ class RTCaptureRunBase(BaseModel):
 
 
 class RTCaptureRunCreate(RTCaptureRunBase):
-    """Schema for creating RT capture run."""
+    """Schema for creating RT capture run (no camera_id in DB schema)."""
+    model_config = ConfigDict(protected_namespaces=())
 
-    camera_id: UUID
-    detect_model_version_id: UUID
+    model_id: Optional[UUID] = None
 
 
 class RTCaptureRunUpdate(BaseModel):
@@ -84,19 +37,17 @@ class RTCaptureRunUpdate(BaseModel):
 
 
 class RTCaptureRunResponse(RTCaptureRunBase):
-    """Schema for RT capture run response."""
+    """Schema for RT capture run response (no camera_id in DB schema)."""
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
     id: UUID
-    camera_id: UUID
-    detect_model_version_id: UUID
+    model_id: Optional[UUID] = None
     started_at: datetime
     ended_at: Optional[datetime]
     status: RTRunStatus
     created_by: Optional[UUID]
     created_at: datetime
     updated_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 # RT Frame
@@ -108,7 +59,11 @@ class RTFrameBase(BaseModel):
     width: Optional[int] = None
     height: Optional[int] = None
     mime_type: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = Field(default=None, validation_alias="metadata_")
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None,
+        validation_alias="metadata_",
+        serialization_alias="metadata_"
+    )
 
 
 class RTFrameCreate(RTFrameBase):
@@ -140,36 +95,3 @@ class RTFrameResponse(RTFrameBase):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
-# RT Inference
-class RTInferenceBase(BaseModel):
-    """Base RT inference schema."""
-
-    latency_ms: Optional[int] = None
-    inference: Dict[str, Any]
-    stats: Optional[Dict[str, Any]] = None
-
-
-class RTInferenceCreate(RTInferenceBase):
-    """Schema for creating RT inference."""
-
-    frame_id: UUID
-    detect_model_version_id: UUID
-
-
-class RTInferenceUpdate(BaseModel):
-    """Schema for updating RT inference."""
-
-    latency_ms: Optional[int] = None
-    stats: Optional[Dict[str, Any]] = None
-
-
-class RTInferenceResponse(RTInferenceBase):
-    """Schema for RT inference response."""
-
-    id: UUID
-    frame_id: UUID
-    detect_model_version_id: UUID
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)

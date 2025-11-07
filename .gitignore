@@ -46,14 +46,9 @@ htmlcov/
 logs/
 log/
 
-# Storage
+# Storage (located in database/ directory)
+database/storage/
 backend/storage/
-storage/datasets/
-storage/models/
-storage/patches/
-storage/noise_attacks/
-storage/realtime/
-storage/temp/
 
 # ML Models
 *.pt

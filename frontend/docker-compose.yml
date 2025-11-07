@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 데이터베이스
+  postgres:
+    image: postgres:15-alpine
+    container_name: army-dashboard-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: army_admin
+      POSTGRES_PASSWORD: SecurePass2024!
+      POSTGRES_DB: korean_army_db
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    networks:
+      - army-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U army_admin -d korean_army_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Next.js 애플리케이션
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: army-dashboard-app
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql://army_admin:SecurePass2024!@postgres:5432/korean_army_db?schema=public"
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: your-secret-key-change-this-in-production
+      JWT_SECRET: your-jwt-secret-change-this-in-production
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    networks:
+      - army-network
+
+  # pgAdmin (선택사항 - 데이터베이스 관리 GUI)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: army-dashboard-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@army.mil
+      PGADMIN_DEFAULT_PASSWORD: AdminPass2024!
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - army-network
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+networks:
+  army-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local

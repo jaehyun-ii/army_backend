@@ -11,10 +11,7 @@ from datetime import datetime
 
 from app.models.model_repo import (
     ODModel,
-    ODModelVersion,
-    ODModelClass,
     ODModelArtifact,
-    ODModelDeployment,
     ModelFramework,
     ModelStage,
     ArtifactType
@@ -33,13 +30,63 @@ class CRUDModel:
         owner_id: Optional[UUID] = None,
         description: Optional[str] = None
     ) -> ODModel:
-        """Create a new model."""
+        """Create a new model (legacy method - without version info)."""
         db_model = ODModel(
             name=name,
             task=task,
             owner_id=owner_id,
-            description=description
+            description=description,
+            version="1.0.0",  # Default version
+            framework=ModelFramework.CUSTOM  # Default framework
         )
+        db.add(db_model)
+        await db.flush()
+        await db.refresh(db_model)
+        return db_model
+
+    async def create_model_with_version(
+        self,
+        db: AsyncSession,
+        *,
+        name: str,
+        version: str,
+        framework: ModelFramework,
+        task: str = "object-detection",
+        owner_id: Optional[UUID] = None,
+        description: Optional[str] = None,
+        framework_version: Optional[str] = None,
+        input_spec: Optional[Dict] = None,
+        labelmap: Optional[Dict] = None,
+        inference_params: Optional[Dict] = None,
+        stage: ModelStage = ModelStage.DRAFT,
+        created_by: Optional[UUID] = None
+    ) -> ODModel:
+        """Create a new model with all version information in one record."""
+        kwargs = {
+            "name": name,
+            "version": version,
+            "framework": framework,
+            "task": task,
+            "stage": stage,
+        }
+
+        # Add optional fields
+        if owner_id is not None:
+            kwargs["owner_id"] = owner_id
+        if description is not None:
+            kwargs["description"] = description
+        if framework_version is not None:
+            kwargs["framework_version"] = framework_version
+        if input_spec is not None:
+            kwargs["input_spec"] = input_spec
+        if labelmap is not None:
+            kwargs["labelmap"] = labelmap
+        if inference_params is not None:
+            kwargs["inference_params"] = inference_params
+        if created_by is not None:
+            kwargs["created_by"] = created_by
+
+        db_model = ODModel(**kwargs)
         db.add(db_model)
         await db.flush()
         await db.refresh(db_model)
@@ -84,149 +131,28 @@ class CRUDModel:
         )
         return list(result.scalars().all())
 
-
-class CRUDModelVersion:
-    """CRUD operations for model versions."""
-
-    async def create_version(
-        self,
-        db: AsyncSession,
-        *,
-        model_id: UUID,
-        version: str,
-        framework: ModelFramework,
-        framework_version: Optional[str] = None,
-        input_spec: Optional[Dict] = None,
-        training_metadata: Optional[Dict] = None,
-        labelmap: Optional[Dict] = None,
-        inference_params: Optional[Dict] = None,
-        stage: ModelStage = ModelStage.DRAFT,
-        created_by: Optional[UUID] = None
-    ) -> ODModelVersion:
-        """Create a new model version."""
-        # Build kwargs, excluding None values for JSONB fields to avoid check constraint violations
-        kwargs = {
-            "model_id": model_id,
-            "version": version,
-            "framework": framework,
-            "stage": stage,
-        }
-
-        # Add optional fields only if they have values
-        if framework_version is not None:
-            kwargs["framework_version"] = framework_version
-        if input_spec is not None:
-            kwargs["input_spec"] = input_spec
-        if training_metadata is not None:
-            kwargs["training_metadata"] = training_metadata
-        if labelmap is not None:
-            kwargs["labelmap"] = labelmap
-        if inference_params is not None:
-            kwargs["inference_params"] = inference_params
-        if created_by is not None:
-            kwargs["created_by"] = created_by
-
-        db_version = ODModelVersion(**kwargs)
-        db.add(db_version)
-        await db.flush()
-        await db.refresh(db_version)
-        return db_version
-
-    async def get_version(
-        self,
-        db: AsyncSession,
-        version_id: UUID
-    ) -> Optional[ODModelVersion]:
-        """Get model version by ID."""
+    async def delete_model(self, db: AsyncSession, model_id: UUID) -> bool:
+        """Soft delete a model by setting deleted_at timestamp."""
         result = await db.execute(
-            select(ODModelVersion).where(
+            select(ODModel).where(
                 and_(
-                    ODModelVersion.id == version_id,
-                    ODModelVersion.deleted_at.is_(None)
+                    ODModel.id == model_id,
+                    ODModel.deleted_at.is_(None)
                 )
             )
         )
-        return result.scalar_one_or_none()
+        db_model = result.scalar_one_or_none()
 
-    async def get_model_versions(
-        self,
-        db: AsyncSession,
-        model_id: UUID
-    ) -> List[ODModelVersion]:
-        """Get all versions of a model."""
-        result = await db.execute(
-            select(ODModelVersion).where(
-                and_(
-                    ODModelVersion.model_id == model_id,
-                    ODModelVersion.deleted_at.is_(None)
-                )
-            )
-        )
-        return list(result.scalars().all())
-
-    async def update_stage(
-        self,
-        db: AsyncSession,
-        version_id: UUID,
-        stage: ModelStage
-    ) -> Optional[ODModelVersion]:
-        """Update model version stage."""
-        db_version = await self.get_version(db, version_id)
-        if db_version:
-            db_version.stage = stage
-            if stage == ModelStage.PRODUCTION:
-                db_version.published_at = datetime.utcnow()
+        if db_model:
+            db_model.deleted_at = datetime.utcnow()
             await db.flush()
-            await db.refresh(db_version)
-        return db_version
+            await db.commit()
+            return True
+        return False
 
 
-class CRUDModelClass:
-    """CRUD operations for model classes."""
-
-    async def create_class(
-        self,
-        db: AsyncSession,
-        *,
-        model_version_id: UUID,
-        class_index: int,
-        class_name: str,
-        metadata: Optional[Dict] = None
-    ) -> ODModelClass:
-        """Create a model class."""
-        db_class = ODModelClass(
-            model_version_id=model_version_id,
-            class_index=class_index,
-            class_name=class_name,
-            metadata_=metadata
-        )
-        db.add(db_class)
-        await db.flush()
-        await db.refresh(db_class)
-        return db_class
-
-    async def create_classes_bulk(
-        self,
-        db: AsyncSession,
-        *,
-        model_version_id: UUID,
-        classes: List[str]
-    ) -> List[ODModelClass]:
-        """Create multiple classes at once."""
-        db_classes = []
-        for idx, class_name in enumerate(classes):
-            db_class = ODModelClass(
-                model_version_id=model_version_id,
-                class_index=idx,
-                class_name=class_name
-            )
-            db_classes.append(db_class)
-
-        db.add_all(db_classes)
-        await db.flush()
-        for db_class in db_classes:
-            await db.refresh(db_class)
-        return db_classes
+# CRUDModelVersion has been removed - all version data is now in ODModel
+# CRUDModelClass has been removed - use od_models.labelmap instead
 
 
 class CRUDModelArtifact:
@@ -241,7 +167,7 @@ class CRUDModelArtifact:
         result = await db.execute(
             select(ODModelArtifact).where(
                 and_(
-                    ODModelArtifact.model_version_id == version_id,
+                    ODModelArtifact.model_id == version_id,
                     ODModelArtifact.deleted_at.is_(None)
                 )
             )
@@ -252,15 +178,17 @@ class CRUDModelArtifact:
         self,
         db: AsyncSession,
         *,
-        model_version_id: UUID,
+        model_id: UUID,  # Direct link to model (merged table)
         artifact_type: ArtifactType,
         storage_key: str,
         file_name: str,
         file_path: Optional[str] = None,
-        content_type: Optional[str] = None,
-        metadata: Optional[Dict] = None
+        content_type: Optional[str] = None
     ) -> ODModelArtifact:
         """Create a model artifact."""
+        if model_id is None:
+            raise ValueError("model_id must be provided")
+
         # Calculate file info if file_path provided
         size_bytes = None
         sha256 = None
@@ -277,11 +205,14 @@ class CRUDModelArtifact:
 
         # Build kwargs, excluding None values for JSONB fields
         kwargs = {
-            "model_version_id": model_version_id,
             "artifact_type": artifact_type,
             "storage_key": storage_key,
             "file_name": file_name,
         }
+
+        # Add model reference
+        if model_id is not None:
+            kwargs["model_id"] = model_id
 
         if size_bytes is not None:
             kwargs["size_bytes"] = size_bytes
@@ -289,8 +220,6 @@ class CRUDModelArtifact:
             kwargs["sha256"] = sha256
         if content_type is not None:
             kwargs["content_type"] = content_type
-        if metadata is not None:
-            kwargs["metadata_"] = metadata
 
         db_artifact = ODModelArtifact(**kwargs)
         db.add(db_artifact)
@@ -299,56 +228,56 @@ class CRUDModelArtifact:
         return db_artifact
 
 
-class CRUDModelDeployment:
-    """CRUD operations for model deployments."""
-
-    async def create_deployment(
-        self,
-        db: AsyncSession,
-        *,
-        model_version_id: UUID,
-        endpoint_url: Optional[str] = None,
-        runtime: Optional[Dict] = None,
-        region: Optional[str] = None,
-        is_active: bool = True
-    ) -> ODModelDeployment:
-        """Create a model deployment."""
-        db_deployment = ODModelDeployment(
-            model_version_id=model_version_id,
-            endpoint_url=endpoint_url,
-            runtime=runtime,
-            region=region,
-            is_active=is_active
-        )
-        db.add(db_deployment)
-        await db.flush()
-        await db.refresh(db_deployment)
-        return db_deployment
-
-    async def deactivate_deployment(
-        self,
-        db: AsyncSession,
-        deployment_id: UUID
-    ) -> Optional[ODModelDeployment]:
-        """Deactivate a deployment."""
-        result = await db.execute(
-            select(ODModelDeployment).where(
-                ODModelDeployment.id == deployment_id
-            )
-        )
-        db_deployment = result.scalar_one_or_none()
-
-        if db_deployment:
-            db_deployment.is_active = False
-            await db.flush()
-            await db.refresh(db_deployment)
-
-        return db_deployment
+# Deployment CRUD disabled (table not in use)
+# class CRUDModelDeployment:
+#     """CRUD operations for model deployments."""
+#
+#     async def create_deployment(
+#         self,
+#         db: AsyncSession,
+#         *,
+#         model_id: UUID,
+#         endpoint_url: Optional[str] = None,
+#         runtime: Optional[Dict] = None,
+#         region: Optional[str] = None,
+#         is_active: bool = True
+#     ) -> ODModelDeployment:
+#         """Create a model deployment."""
+#         db_deployment = ODModelDeployment(
+#             model_id=model_id,
+#             endpoint_url=endpoint_url,
+#             runtime=runtime,
+#             region=region,
+#             is_active=is_active
+#         )
+#         db.add(db_deployment)
+#         await db.flush()
+#         await db.refresh(db_deployment)
+#         return db_deployment
+#
+#     async def deactivate_deployment(
+#         self,
+#         db: AsyncSession,
+#         deployment_id: UUID
+#     ) -> Optional[ODModelDeployment]:
+#         """Deactivate a deployment."""
+#         result = await db.execute(
+#             select(ODModelDeployment).where(
+#                 ODModelDeployment.id == deployment_id
+#             )
+#         )
+#         db_deployment = result.scalar_one_or_none()
+#
+#         if db_deployment:
+#             db_deployment.is_active = False
+#             await db.flush()
+#             await db.refresh(db_deployment)
+#
+#         return db_deployment
 
 
 # Create instances
 crud_model = CRUDModel()
-crud_model_version = CRUDModelVersion()
-crud_model_class = CRUDModelClass()
 crud_model_artifact = CRUDModelArtifact()
-crud_model_deployment = CRUDModelDeployment()
+# crud_model_class = CRUDModelClass()  # Removed - use od_models.labelmap instead
+# crud_model_deployment = CRUDModelDeployment()  # Disabled - table not in use

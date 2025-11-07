@@ -123,7 +123,16 @@ class Settings(BaseSettings):
     S3_BUCKET: Optional[str] = None
 
     # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:3003",
+        "http://localhost:8080",
+        "http://localhost:8000",
+        "http://127.0.0.1:8080",
+        "http://127.0.0.1:8000",
+    ]
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_ALLOW_METHODS: List[str] = ["*"]
     CORS_ALLOW_HEADERS: List[str] = ["*"]

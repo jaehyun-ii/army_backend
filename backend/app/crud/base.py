@@ -54,6 +54,8 @@ class CRUDWrite(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             obj_data["owner_id"] = owner_id
         if hasattr(self.model, "created_by") and owner_id:
             obj_data["created_by"] = owner_id
+        if hasattr(self.model, "uploaded_by") and owner_id:
+            obj_data["uploaded_by"] = owner_id
 
         db_obj = self.model(**obj_data)
         db.add(db_obj)

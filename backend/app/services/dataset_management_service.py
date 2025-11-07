@@ -13,9 +13,8 @@ from sqlalchemy.orm import Session, joinedload
 from app import crud, schemas
 from app.core.exceptions import NotFoundError
 from app.models.dataset_2d import Dataset2D, Image2D
-from app.models.inference import DatasetClassStatistics, InferenceMetadata
 from app.utils.storage import storage_manager
-from app.services.custom_model_service import custom_model_service
+from app.services.model_inference_service import model_inference_service
 import cv2
 
 logger = logging.getLogger(__name__)
@@ -30,7 +29,7 @@ class DatasetStatisticsService:
         storage=storage_manager,
         dataset_repository=crud.dataset_2d,
         image_repository=crud.image_2d,
-        inference_service=custom_model_service,
+        inference_service=model_inference_service,
     ):
         self.storage = storage
         self.dataset_repository = dataset_repository
@@ -56,10 +55,20 @@ class DatasetStatisticsService:
                 continue
 
             try:
+                # Convert to relative path from STORAGE_ROOT
+                from app.core.config import settings
+                storage_root = Path(settings.STORAGE_ROOT)
+                try:
+                    storage_key = str(image_path.relative_to(storage_root))
+                except ValueError:
+                    # If image_path is not relative to storage_root, use absolute path as fallback
+                    logger.warning("Image path %s is not relative to STORAGE_ROOT, using absolute path", image_path)
+                    storage_key = str(image_path)
+
                 image_data = schemas.ImageCreate(
                     dataset_id=dataset_id,
                     file_name=image_path.name,
-                    storage_key=str(image_path),
+                    storage_key=storage_key,
                 )
                 await self.image_repository.create(db, obj_in=image_data)
             except Exception as exc:
@@ -85,6 +94,7 @@ class DatasetStatisticsService:
                 & (Image2D.deleted_at.is_(None)),
             )
             .filter(Dataset2D.deleted_at.is_(None))
+            .filter(~Dataset2D.name.like('%_output'))  # Exclude attack output datasets
             .group_by(Dataset2D.id)
             .offset(skip)
             .limit(limit)
@@ -92,12 +102,30 @@ class DatasetStatisticsService:
 
         summaries: List[Dict[str, Any]] = []
         for dataset, image_count in result.all():
+            # Get storage size if available
+            total_size_bytes = 0
+            try:
+                if dataset.storage_path:
+                    storage_info = self.storage.get_dataset_info(dataset.storage_path)
+                    total_size_bytes = storage_info.get("total_size_bytes", 0)
+            except Exception as exc:
+                logger.debug(
+                    "Could not get storage info for dataset %s: %s",
+                    dataset.id,
+                    exc,
+                )
+
             summaries.append(
                 {
                     "id": dataset.id,
                     "name": dataset.name,
                     "description": dataset.description,
                     "image_count": image_count,
+                    "storage_path": dataset.storage_path,
+                    "metadata": {
+                        **(dataset.metadata_ or {}),
+                        "total_size_bytes": total_size_bytes,
+                    },
                     "created_at": dataset.created_at,
                     "updated_at": dataset.updated_at,
                 }
@@ -171,7 +199,7 @@ class DatasetStatisticsService:
         self,
         db: AsyncSession,
         dataset_id: UUID,
-        model_version_id: UUID,
+        estimator_id: str,
         conf_threshold: float = 0.25,
     ) -> Dict[str, Any]:
         from collections import Counter
@@ -208,7 +236,7 @@ class DatasetStatisticsService:
                 continue
 
             result = await self.inference_service.run_inference(
-                version_id=str(model_version_id),
+                version_id=estimator_id,
                 image=image_array,
                 conf_threshold=conf_threshold,
             )
@@ -224,7 +252,7 @@ class DatasetStatisticsService:
         return {
             **basic_stats,
             "detection_statistics": {
-                "model_version_id": str(model_version_id),
+                "estimator_id": estimator_id,
                 "conf_threshold": conf_threshold,
                 "total_detections": total_detections,
                 "images_with_detections": images_with_detections,
@@ -245,63 +273,34 @@ class DatasetStatisticsService:
     ) -> Dict[str, Any]:
         dataset_result = await db.execute(
             select(Dataset2D)
-            .options(joinedload(Dataset2D.inference_metadata))
             .filter(Dataset2D.id == dataset_id, Dataset2D.deleted_at.is_(None))
         )
         dataset = dataset_result.scalar_one_or_none()
         if not dataset:
             raise NotFoundError(resource=f"Dataset {dataset_id}")
 
-        stats_result = await db.execute(
-            select(DatasetClassStatistics)
-            .filter(DatasetClassStatistics.dataset_id == dataset_id)
-            .order_by(DatasetClassStatistics.detection_count.desc())
-            .limit(limit)
-        )
-        stats = stats_result.scalars().all()
-
-        if not stats:
-            image_result = await db.execute(
-                select(Image2D).filter(
-                    Image2D.dataset_id == dataset_id,
-                    Image2D.deleted_at.is_(None),
-                )
+        # Note: DatasetClassStatistics and InferenceMetadata tables removed
+        # Fallback to dataset metadata or return empty
+        image_result = await db.execute(
+            select(Image2D).filter(
+                Image2D.dataset_id == dataset_id,
+                Image2D.deleted_at.is_(None),
             )
-            images = image_result.scalars().all()
-            return {
-                "dataset_id": str(dataset_id),
-                "dataset_name": dataset.name,
-                "total_images": len(images),
-                "top_classes": [],
-                "source": "none",
-                "cached": False,
-                "message": "No inference metadata available for this dataset",
-            }
+        )
+        images = image_result.scalars().all()
 
-        inference_meta: Optional[InferenceMetadata] = dataset.inference_metadata
-        total_images = inference_meta.total_images if inference_meta else 0
-        total_detections = inference_meta.total_detections if inference_meta else 0
-
-        top_classes = [
-            {
-                "class_name": s.class_name,
-                "count": s.detection_count,
-                "percentage": round((s.detection_count / total_detections) * 100, 2)
-                if total_detections > 0
-                else 0,
-                "avg_confidence": round(s.avg_confidence, 3),
-                "image_count": s.image_count,
-            }
-            for s in stats
-        ]
+        # Try to get class information from dataset metadata
+        metadata = dataset.metadata_ or {}
+        classes_from_meta = metadata.get("classes", [])
 
         return {
             "dataset_id": str(dataset_id),
             "dataset_name": dataset.name,
-            "total_images": total_images,
-            "top_classes": top_classes,
-            "source": "metadata",
-            "cached": True,
+            "total_images": len(images),
+            "top_classes": classes_from_meta[:limit] if classes_from_meta else [],
+            "source": "metadata" if classes_from_meta else "none",
+            "cached": False,
+            "message": "Class statistics tables not available. Showing metadata only." if not classes_from_meta else None,
         }
 
     async def get_class_distribution(
@@ -313,32 +312,7 @@ class DatasetStatisticsService:
         if not dataset:
             raise NotFoundError(resource=f"Dataset {dataset_id}")
 
-        from app.models.inference import DatasetClassStatistics
-
-        result = await db.execute(
-            select(DatasetClassStatistics).where(
-                DatasetClassStatistics.dataset_id == dataset_id
-            )
-        )
-        class_stats = result.scalars().all()
-
-        if class_stats:
-            return {
-                "dataset_id": str(dataset_id),
-                "dataset_name": dataset.name,
-                "classes": [
-                    {
-                        "class_name": stat.class_name,
-                        "count": stat.count,
-                        "percentage": stat.percentage,
-                        "avg_confidence": stat.avg_confidence,
-                    }
-                    for stat in class_stats
-                ],
-                "total_classes": len(class_stats),
-                "source": "statistics_table",
-            }
-
+        # Note: DatasetClassStatistics table removed, using metadata only
         metadata = dataset.metadata_ or {}
         return {
             "dataset_id": str(dataset_id),

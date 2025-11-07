@@ -36,8 +36,10 @@ async def create_eval_run(
     created_by: Optional[UUID] = None,
 ) -> EvalRun:
     """Create a new evaluation run."""
+    # Exclude None values to avoid constraint violations
+    eval_run_data = eval_run.model_dump(exclude_none=True)
     db_eval_run = EvalRun(
-        **eval_run.model_dump(),
+        **eval_run_data,
         created_by=created_by,
     )
     db.add(db_eval_run)
@@ -65,7 +67,7 @@ async def get_eval_runs(
     limit: int = 100,
     phase: Optional[EvalPhase] = None,
     status: Optional[EvalStatus] = None,
-    model_version_id: Optional[UUID] = None,
+    model_id: Optional[UUID] = None,
     base_dataset_id: Optional[UUID] = None,
     attack_dataset_id: Optional[UUID] = None,
 ) -> tuple[List[EvalRun], int]:
@@ -76,8 +78,8 @@ async def get_eval_runs(
         filters.append(EvalRun.phase == phase)
     if status:
         filters.append(EvalRun.status == status)
-    if model_version_id:
-        filters.append(EvalRun.model_version_id == model_version_id)
+    if model_id:
+        filters.append(EvalRun.model_id == model_id)
     if base_dataset_id:
         filters.append(EvalRun.base_dataset_id == base_dataset_id)
     if attack_dataset_id:
@@ -444,7 +446,7 @@ async def get_list_items(
 
 async def get_eval_run_pairs(
     db: AsyncSession,
-    model_version_id: Optional[UUID] = None,
+    model_id: Optional[UUID] = None,
     base_dataset_id: Optional[UUID] = None,
     attack_dataset_id: Optional[UUID] = None,
 ) -> List[Dict[str, Any]]:
@@ -453,8 +455,8 @@ async def get_eval_run_pairs(
     Uses the eval_run_pairs view.
     """
     filters = []
-    if model_version_id:
-        filters.append("model_version_id = :model_version_id")
+    if model_id:
+        filters.append("model_id = :model_id")
     if base_dataset_id:
         filters.append("base_dataset_id = :base_dataset_id")
     if attack_dataset_id:
@@ -464,8 +466,8 @@ async def get_eval_run_pairs(
     query = text(f"SELECT * FROM eval_run_pairs WHERE {where_clause}")
 
     params = {}
-    if model_version_id:
-        params["model_version_id"] = str(model_version_id)
+    if model_id:
+        params["model_id"] = str(model_id)
     if base_dataset_id:
         params["base_dataset_id"] = str(base_dataset_id)
     if attack_dataset_id:
@@ -477,7 +479,7 @@ async def get_eval_run_pairs(
 
 async def get_eval_run_pairs_delta(
     db: AsyncSession,
-    model_version_id: Optional[UUID] = None,
+    model_id: Optional[UUID] = None,
 ) -> List[Dict[str, Any]]:
     """
     Get pre/post evaluation run pairs with delta metrics.
@@ -486,9 +488,9 @@ async def get_eval_run_pairs_delta(
     where_clause = ""
     params = {}
 
-    if model_version_id:
-        where_clause = "WHERE model_version_id = :model_version_id"
-        params["model_version_id"] = str(model_version_id)
+    if model_id:
+        where_clause = "WHERE model_id = :model_id"
+        params["model_id"] = str(model_id)
 
     query = text(f"SELECT * FROM eval_run_pairs_delta {where_clause}")
     result = await db.execute(query, params)

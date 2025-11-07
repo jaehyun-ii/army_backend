@@ -1,0 +1,264 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model EvaluationRecord {
+  id               String            @id @default(uuid())
+  modelName        String
+  modelVersion     String
+  evaluationType   String
+  accuracy         Float?
+  precision        Float?
+  recall           Float?
+  f1Score          Float?
+  processingTime   Float?
+  datasetSize      Int?
+  successRate      Float?
+  notes            String?
+  metadata         Json?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  adversarialTests AdversarialTest[]
+  performanceTests PerformanceTest[]
+}
+
+model AdversarialTest {
+  id               String           @id @default(uuid())
+  evaluationId     String
+  attackType       String
+  epsilon          Float?
+  successRate      Float
+  robustness       Float
+  originalAccuracy Float?
+  attackedAccuracy Float?
+  sampleCount      Int
+  metadata         Json?
+  createdAt        DateTime         @default(now())
+  evaluation       EvaluationRecord @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+}
+
+model PerformanceTest {
+  id           String           @id @default(uuid())
+  evaluationId String
+  testType     String
+  metric       String
+  value        Float
+  unit         String
+  conditions   String?
+  metadata     Json?
+  createdAt    DateTime         @default(now())
+  evaluation   EvaluationRecord @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+}
+
+model Dataset {
+  id              String           @id @default(uuid())
+  name            String
+  type            String
+  source          String?
+  size            Int
+  storageLocation String?
+  description     String?
+  metadata        Json?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  inferenceData   Json?
+  modelName       String?
+  targetClass     String?
+  dataGenerations DataGeneration[]
+  imageFiles      ImageFile[]
+}
+
+model ImageFile {
+  id            String   @id @default(uuid())
+  datasetId     String
+  filename      String
+  data          String?  @db.Text // Base64 encoded image data
+  size          Int
+  width         Int?
+  height        Int?
+  format        String
+  mimeType      String
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  detections    Json?
+  visualization String?
+  dataset       Dataset  @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  @@index([datasetId])
+}
+
+model DataGeneration {
+  id             String    @id @default(uuid())
+  datasetId      String
+  generationType String
+  parameters     Json
+  outputCount    Int
+  status         String
+  startTime      DateTime?
+  endTime        DateTime?
+  errorMessage   String?
+  createdAt      DateTime  @default(now())
+  dataset        Dataset   @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+}
+
+model SystemLog {
+  id        String   @id @default(uuid())
+  level     String
+  category  String
+  message   String
+  details   Json?
+  userId    String?
+  sessionId String?
+  createdAt DateTime @default(now())
+
+  @@index([level, category])
+  @@index([createdAt])
+}
+
+model User {
+  id          String        @id @default(uuid())
+  email       String        @unique
+  username    String        @unique
+  password    String
+  name        String
+  rank        String?
+  unit        String?
+  role        String        @default("USER")
+  isActive    Boolean       @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  activities  ActivityLog[]
+  sessions    Session[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  userId     String
+  action     String
+  entityType String?
+  entityId   String?
+  details    Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model AdversarialTraining {
+  id                  Int                       @id @default(autoincrement())
+  targetClass         String                    @map("target_class") @db.VarChar(50)
+  targetClassId       Int                       @map("target_class_id")
+  modelPath           String                    @map("model_path") @db.VarChar(255)
+  patchSize           Int                       @map("patch_size")
+  areaRatio           Float                     @map("area_ratio")
+  epsilon             Float
+  alpha               Float
+  iterations          Int
+  batchSize           Int                       @map("batch_size")
+  bestScore           Float?                    @map("best_score")
+  patchFilePath       String?                   @map("patch_file_path") @db.VarChar(500)
+  patchData           String?                   @map("patch_data") @db.Text
+  status              String                    @default("pending") @db.VarChar(20)
+  patchName           String?                   @map("patch_name") @db.VarChar(255)
+  datasetId           String?                   @map("dataset_id") @db.VarChar(255)
+  datasetName         String?                   @map("dataset_name") @db.VarChar(255)
+  inferenceJsonPath   String?                   @map("inference_json_path") @db.VarChar(500)
+  createdAt           DateTime                  @default(now()) @map("created_at")
+  completedAt         DateTime?                 @map("completed_at")
+
+  logs                AdversarialTrainingLog[]
+  results             AdversarialResult[]
+
+  @@index([status])
+  @@index([patchName], map: "idx_adversarial_training_patch_name")
+  @@index([datasetId], map: "idx_adversarial_training_dataset_id")
+  @@map("adversarial_training")
+}
+
+model AdversarialTrainingLog {
+  id            Int                 @id @default(autoincrement())
+  trainingId    Int                 @map("training_id")
+  iteration     Int
+  avgLoss       Float?              @map("avg_loss")
+  detectedCount Int?                @map("detected_count")
+  totalCount    Int?                @map("total_count")
+  message       String?             @db.Text
+  createdAt     DateTime            @default(now()) @map("created_at")
+
+  training      AdversarialTraining @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+
+  @@index([trainingId], map: "idx_adversarial_training_logs_training_id")
+  @@map("adversarial_training_logs")
+}
+
+model AdversarialResult {
+  id                     Int                 @id @default(autoincrement())
+  trainingId             Int                 @map("training_id")
+  originalImagePath      String              @map("original_image_path") @db.VarChar(500)
+  adversarialImagePath   String              @map("adversarial_image_path") @db.VarChar(500)
+  visualizedImagePath    String?             @map("visualized_image_path") @db.VarChar(500)
+  originalDetections     Int                 @map("original_detections")
+  adversarialDetections  Int                 @map("adversarial_detections")
+  reduction              Int
+  bboxes                 Json?
+  createdAt              DateTime            @default(now()) @map("created_at")
+
+  training               AdversarialTraining @relation(fields: [trainingId], references: [id], onDelete: Cascade)
+
+  @@index([trainingId], map: "idx_adversarial_results_training_id")
+  @@map("adversarial_results")
+}
+
+model CameraCapture {
+  id                    Int                     @id @default(autoincrement())
+  modelPath             String                  @map("model_path") @db.VarChar(255)
+  totalImages           Int                     @default(10) @map("total_images")
+  durationSeconds       Int                     @default(5) @map("duration_seconds")
+  status                String                  @default("in_progress") @db.VarChar(50)
+  avgConfidenceOverall  Float?                  @map("avg_confidence_overall")
+  totalDetections       Int?                    @default(0) @map("total_detections")
+  createdAt             DateTime                @default(now()) @map("created_at")
+  completedAt           DateTime?               @map("completed_at")
+
+  images                CameraCaptureImage[]
+
+  @@index([createdAt(sort: Desc)], map: "idx_camera_captures_created_at")
+  @@map("camera_captures")
+}
+
+model CameraCaptureImage {
+  id            Int           @id @default(autoincrement())
+  captureId     Int           @map("capture_id")
+  imagePath     String        @map("image_path") @db.VarChar(500)
+  frameNumber   Int           @map("frame_number")
+  detections    Json?
+  avgConfidence Float?        @map("avg_confidence")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  capture       CameraCapture @relation(fields: [captureId], references: [id], onDelete: Cascade)
+
+  @@index([captureId], map: "idx_camera_capture_images_capture_id")
+  @@index([frameNumber], map: "idx_camera_capture_images_frame_number")
+  @@map("camera_capture_images")
+}

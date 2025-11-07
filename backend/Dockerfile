@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Upgrade pip and install build tools
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
 # Copy requirements and install Python dependencies
 COPY requirements.txt requirements-dev.txt ./
 RUN pip install --no-cache-dir --user -r requirements.txt
@@ -23,6 +26,7 @@ WORKDIR /app
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     libpq5 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Python packages from builder
@@ -33,8 +37,6 @@ ENV PATH=/root/.local/bin:$PATH
 
 # Copy application code
 COPY app/ ./app/
-COPY alembic/ ./alembic/
-COPY alembic.ini ./
 
 # Create storage directory
 RUN mkdir -p storage
@@ -46,5 +48,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/health')"
 
-# Run migrations and start server
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# Start server with graceful shutdown timeout
+# Development: 1 second for fast hot reload
+# Production: 30 seconds for graceful connection handling
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8000 --timeout-graceful-shutdown ${GRACEFUL_SHUTDOWN_TIMEOUT:-30}"]

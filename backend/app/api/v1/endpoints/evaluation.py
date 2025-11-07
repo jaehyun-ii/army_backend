@@ -3,8 +3,14 @@ API endpoints for evaluation operations.
 """
 from typing import Optional, List
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, BackgroundTasks, Body
+from fastapi.responses import StreamingResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel as PydanticBaseModel
+import cv2
+import numpy as np
+from pathlib import Path
+import hashlib
 
 from app.database import get_db
 from app.crud import evaluation as crud_evaluation
@@ -32,8 +38,16 @@ from app.schemas.evaluation import (
     EvalStatus,
     EvalPhase,
 )
+from app.services.evaluation_service import evaluation_service
 
 router = APIRouter()
+
+
+# ========== Request Models ==========
+
+class ExecuteEvalRequest(PydanticBaseModel):
+    """Request body for executing evaluation."""
+    session_id: Optional[str] = None
 
 
 # ========== Evaluation Run Endpoints ==========
@@ -85,7 +99,7 @@ async def list_evaluation_runs(
     page_size: int = Query(50, ge=1, le=100),
     phase: Optional[EvalPhase] = None,
     status_filter: Optional[EvalStatus] = Query(None, alias="status"),
-    model_version_id: Optional[UUID] = None,
+    model_id: Optional[UUID] = None,
     base_dataset_id: Optional[UUID] = None,
     attack_dataset_id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db),
@@ -96,7 +110,7 @@ async def list_evaluation_runs(
     Filters:
     - **phase**: pre_attack or post_attack
     - **status**: queued, running, completed, failed, aborted
-    - **model_version_id**: Filter by model version
+    - **model_id**: Filter by model version
     - **base_dataset_id**: Filter by base dataset
     - **attack_dataset_id**: Filter by attack dataset
     """
@@ -107,7 +121,7 @@ async def list_evaluation_runs(
         limit=page_size,
         phase=phase,
         status=status_filter,
-        model_version_id=model_version_id,
+        model_id=model_id,
         base_dataset_id=base_dataset_id,
         attack_dataset_id=attack_dataset_id,
     )
@@ -151,6 +165,108 @@ async def delete_evaluation_run(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Evaluation run not found",
         )
+
+
+@router.post("/runs/{run_id}/execute", response_model=EvalRunResponse)
+async def execute_evaluation_run(
+    run_id: UUID,
+    background_tasks: BackgroundTasks,
+    conf_threshold: float = Query(0.25, ge=0.0, le=1.0),
+    iou_threshold: float = Query(0.45, ge=0.0, le=1.0),
+    request_body: ExecuteEvalRequest = Body(default=ExecuteEvalRequest()),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Execute an evaluation run in the background.
+
+    The evaluation will run asynchronously and update the run status.
+    - Initial status will be set to 'queued' then 'running'
+    - Upon completion, status will be 'completed' with metrics
+    - On failure, status will be 'failed'
+
+    If session_id is provided, real-time logs will be streamed via SSE.
+    Connect to /evaluation/runs/events/{session_id} before calling this endpoint.
+    """
+    # Check if evaluation run exists
+    db_eval_run = await crud_evaluation.get_eval_run(db=db, eval_run_id=run_id)
+    if not db_eval_run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evaluation run not found",
+        )
+
+    # Check if already running or completed
+    if db_eval_run.status in [EvalStatus.RUNNING, EvalStatus.COMPLETED]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Evaluation run is already {db_eval_run.status}",
+        )
+
+    # Update status to queued
+    await crud_evaluation.update_eval_run(
+        db=db,
+        eval_run_id=run_id,
+        eval_run_update=EvalRunUpdate(status=EvalStatus.QUEUED),
+    )
+    await db.commit()
+    await db.refresh(db_eval_run)
+
+    # Schedule evaluation in background
+    # Note: We need to create a new session for background tasks
+    session_id = request_body.session_id
+
+    async def run_evaluation():
+        from app.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as bg_db:
+            try:
+                await evaluation_service.execute_evaluation(
+                    db=bg_db,
+                    eval_run_id=run_id,
+                    conf_threshold=conf_threshold,
+                    iou_threshold=iou_threshold,
+                    session_id=session_id,
+                )
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Background evaluation failed: {e}", exc_info=True)
+
+    background_tasks.add_task(run_evaluation)
+
+    return db_eval_run
+
+
+@router.get("/runs/events/{session_id}")
+async def evaluation_events(session_id: str):
+    """
+    SSE endpoint for real-time evaluation logs.
+
+    Connect to this endpoint BEFORE calling /runs/{run_id}/execute with the same session_id.
+
+    Receives:
+    - Status updates (queued, running, completed, failed)
+    - Progress updates (loading dataset, running inference, calculating metrics)
+    - Info messages (dataset info, image counts, metric results)
+    - Success/Error notifications
+    - Completion notification
+
+    Example event format:
+    data: {"type": "status", "message": "평가 시작 중...", "timestamp": "..."}
+    data: {"type": "info", "message": "총 100개 이미지 발견", "timestamp": "..."}
+    data: {"type": "complete", "message": "평가 완료", "eval_run_id": "...", "timestamp": "..."}
+    """
+    # Create session for this SSE connection
+    evaluation_service.sse_manager.create_session(session_id)
+
+    return StreamingResponse(
+        evaluation_service.sse_manager.event_stream(session_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable buffering in nginx
+        },
+    )
 
 
 # ========== Evaluation Item Endpoints ==========
@@ -329,6 +445,274 @@ async def update_class_metrics(
     return db_metrics
 
 
-# Note: Evaluation Lists and Comparison endpoints removed as they are not used by frontend
+# ========== Visualization Endpoints ==========
+
+def get_class_color(class_name: str) -> tuple:
+    """
+    Generate consistent color for a class name using hash.
+    Same class name will always return the same color.
+    """
+    # Hash the class name
+    hash_value = int(hashlib.md5(class_name.encode()).hexdigest(), 16)
+
+    # Generate RGB values from hash (using HSV for better color distribution)
+    hue = (hash_value % 360) / 360.0
+    saturation = 0.7 + (hash_value % 30) / 100.0  # 0.7-1.0
+    value = 0.8 + (hash_value % 20) / 100.0  # 0.8-1.0
+
+    # Convert HSV to RGB
+    import colorsys
+    rgb = colorsys.hsv_to_rgb(hue, saturation, value)
+
+    # Convert to BGR for OpenCV (0-255)
+    return (int(rgb[2] * 255), int(rgb[1] * 255), int(rgb[0] * 255))
+
+
+def draw_bounding_boxes(image: np.ndarray, detections: List[dict], title: str = "") -> np.ndarray:
+    """
+    Draw bounding boxes on image with consistent colors per class.
+
+    Args:
+        image: Input image
+        detections: List of detection dicts with bbox and class_name
+        title: Title to display on image
+
+    Returns:
+        Image with bounding boxes drawn
+    """
+    img = image.copy()
+    height, width = img.shape[:2]
+
+    # Draw title if provided
+    if title:
+        cv2.rectangle(img, (0, 0), (width, 40), (0, 0, 0), -1)
+        cv2.putText(img, title, (10, 28), cv2.FONT_HERSHEY_SIMPLEX,
+                   0.8, (255, 255, 255), 2)
+
+    for det in detections:
+        bbox = det.get('bbox', {})
+        class_name = det.get('class_name', 'unknown')
+        confidence = det.get('confidence', 0.0)
+
+        # Get consistent color for this class
+        color = get_class_color(class_name)
+
+        # Extract coordinates (handle both formats)
+        if 'x1' in bbox:
+            x1, y1, x2, y2 = int(bbox['x1']), int(bbox['y1']), int(bbox['x2']), int(bbox['y2'])
+        elif 'x_center' in bbox:
+            x_center, y_center = bbox['x_center'], bbox['y_center']
+            w, h = bbox['width'], bbox['height']
+            x1 = int((x_center - w/2) * width)
+            y1 = int((y_center - h/2) * height)
+            x2 = int((x_center + w/2) * width)
+            y2 = int((y_center + h/2) * height)
+        else:
+            continue
+
+        # Draw bounding box
+        cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
+
+        # Draw label background
+        label = f"{class_name} {confidence:.2f}"
+        (label_w, label_h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        cv2.rectangle(img, (x1, y1 - label_h - 10), (x1 + label_w + 10, y1), color, -1)
+
+        # Draw label text
+        cv2.putText(img, label, (x1 + 5, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX,
+                   0.5, (255, 255, 255), 1)
+
+    return img
+
+
+@router.get("/items/{item_id}/visualize")
+async def visualize_evaluation_item(
+    item_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Visualize evaluation item with bounding boxes drawn on the image.
+
+    Shows both ground truth (if available) and predictions with consistent colors per class.
+    """
+    # Get evaluation item
+    eval_item = await crud_evaluation.get_eval_item(db=db, eval_item_id=item_id)
+    if not eval_item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Evaluation item not found"
+        )
+
+    # Get image path
+    if eval_item.image_2d_id:
+        from app import crud
+        image_2d = await crud.image_2d.get(db=db, id=eval_item.image_2d_id)
+        if not image_2d:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Image not found"
+            )
+        image_path = Path(image_2d.storage_key)
+    elif eval_item.storage_key:
+        image_path = Path(eval_item.storage_key)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Image path not found"
+        )
+
+    if not image_path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Image file not found: {image_path}"
+        )
+
+    # Read image
+    img = cv2.imread(str(image_path))
+    if img is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to read image"
+        )
+
+    # Draw predictions
+    predictions = eval_item.prediction if eval_item.prediction else []
+    if isinstance(predictions, dict):
+        predictions = [predictions]
+    elif not isinstance(predictions, list):
+        predictions = []
+
+    img_with_boxes = draw_bounding_boxes(img, predictions, "Predictions")
+
+    # Encode image to JPEG
+    success, encoded_img = cv2.imencode('.jpg', img_with_boxes)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to encode image"
+        )
+
+    return Response(content=encoded_img.tobytes(), media_type="image/jpeg")
+
+
+@router.get("/runs/{run_id}/sample-images")
+async def get_sample_visualizations(
+    run_id: UUID,
+    limit: int = Query(5, ge=1, le=20),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get sample visualization URLs for an evaluation run.
+
+    Returns a list of evaluation item IDs that can be visualized.
+    """
+    # Get evaluation items
+    items, _ = await crud_evaluation.get_eval_items(
+        db=db,
+        run_id=run_id,
+        skip=0,
+        limit=limit
+    )
+
+    return {
+        "run_id": str(run_id),
+        "sample_items": [
+            {
+                "item_id": str(item.id),
+                "file_name": item.file_name,
+                "visualization_url": f"/api/v1/evaluation/items/{item.id}/visualize"
+            }
+            for item in items
+        ]
+    }
+
+
+# ========== Robustness Analysis Endpoints ==========
+
+@router.post("/runs/compare-robustness")
+async def compare_robustness(
+    clean_run_id: UUID = Body(..., description="Evaluation run ID for clean/baseline dataset"),
+    adv_run_id: UUID = Body(..., description="Evaluation run ID for adversarial dataset"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Calculate robustness metrics by comparing clean vs adversarial evaluation runs.
+
+    Returns:
+        Dictionary containing:
+        - delta_map: Absolute drop in mAP
+        - drop_percentage: Percentage drop in mAP
+        - robustness_ratio: AP_adv / AP_clean (1.0 = fully robust)
+        - delta metrics for various performance indicators
+        - per-class robustness breakdown
+    """
+    from app.services.metrics_calculator import calculate_robustness_metrics
+
+    # Get both evaluation runs
+    clean_run = await crud_evaluation.get_eval_run(db=db, eval_run_id=clean_run_id)
+    adv_run = await crud_evaluation.get_eval_run(db=db, eval_run_id=adv_run_id)
+
+    if not clean_run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Clean evaluation run {clean_run_id} not found"
+        )
+
+    if not adv_run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Adversarial evaluation run {adv_run_id} not found"
+        )
+
+    # Check if both runs are completed
+    if clean_run.status != EvalStatus.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Clean evaluation run is not completed (status: {clean_run.status})"
+        )
+
+    if adv_run.status != EvalStatus.COMPLETED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Adversarial evaluation run is not completed (status: {adv_run.status})"
+        )
+
+    # Get metrics from both runs
+    clean_metrics = clean_run.metrics_summary or {}
+    adv_metrics = adv_run.metrics_summary or {}
+
+    # Calculate overall robustness metrics
+    overall_robustness = calculate_robustness_metrics(clean_metrics, adv_metrics)
+
+    # Get per-class metrics for both runs
+    clean_class_metrics = await crud_evaluation.get_eval_class_metrics(db=db, run_id=clean_run_id)
+    adv_class_metrics = await crud_evaluation.get_eval_class_metrics(db=db, run_id=adv_run_id)
+
+    # Build per-class robustness metrics
+    per_class_robustness = {}
+    clean_class_map = {cm.class_name: cm.metrics for cm in clean_class_metrics}
+    adv_class_map = {cm.class_name: cm.metrics for cm in adv_class_metrics}
+
+    all_classes = set(clean_class_map.keys()).union(set(adv_class_map.keys()))
+
+    for class_name in all_classes:
+        clean_class = clean_class_map.get(class_name, {})
+        adv_class = adv_class_map.get(class_name, {})
+
+        per_class_robustness[class_name] = calculate_robustness_metrics(clean_class, adv_class)
+
+    return {
+        "clean_run_id": str(clean_run_id),
+        "adv_run_id": str(adv_run_id),
+        "clean_run_name": clean_run.name,
+        "adv_run_name": adv_run.name,
+        "overall_robustness": overall_robustness,
+        "per_class_robustness": per_class_robustness,
+        "model_id": str(clean_run.model_id),
+        "comparison_timestamp": datetime.now().isoformat(),
+    }
+
+
+# Note: Evaluation Lists endpoints removed as they are not used by frontend
 # The database tables (eval_lists, eval_list_items) and views (eval_run_pairs, eval_run_pairs_delta)
 # remain in the database schema for potential future use.

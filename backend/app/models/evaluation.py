@@ -47,15 +47,10 @@ class EvalRun(Base):
     phase = Column(SQLEnum(EvalPhase, name="eval_phase_enum", values_callable=lambda x: [e.value for e in x]), nullable=False)
 
     # Foreign keys
-    model_version_id = Column(UUID(as_uuid=True), ForeignKey("od_model_versions.id", ondelete="RESTRICT"), nullable=False)
-    # Dataset dimension
-    dataset_dimension = Column(SQLEnum(DatasetDimension, name="dataset_dimension_enum", values_callable=lambda x: [e.value for e in x]), nullable=False, default=DatasetDimension.TWO_D.value)
-    # 2D datasets
+    model_id = Column(UUID(as_uuid=True), ForeignKey("od_models.id", ondelete="RESTRICT"), nullable=False)
+    # 2D datasets only (3D datasets removed)
     base_dataset_id = Column(UUID(as_uuid=True), ForeignKey("datasets_2d.id", ondelete="RESTRICT"), nullable=True)
     attack_dataset_id = Column(UUID(as_uuid=True), ForeignKey("attack_datasets_2d.id", ondelete="RESTRICT"), nullable=True)
-    # 3D datasets
-    base_dataset_3d_id = Column(UUID(as_uuid=True), ForeignKey("datasets_3d.id", ondelete="RESTRICT"), nullable=True)
-    attack_dataset_3d_id = Column(UUID(as_uuid=True), ForeignKey("attack_datasets_3d.id", ondelete="RESTRICT"), nullable=True)
     # Experiment linkage
     experiment_id = Column(UUID(as_uuid=True), ForeignKey("experiments.id", ondelete="SET NULL"), nullable=True)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -91,14 +86,8 @@ class EvalRun(Base):
             name="chk_eval_metrics_summary"
         ),
         CheckConstraint(
-            "(dataset_dimension = '2d' AND phase = 'pre_attack' AND base_dataset_id IS NOT NULL "
-            "AND attack_dataset_id IS NULL AND base_dataset_3d_id IS NULL AND attack_dataset_3d_id IS NULL) OR "
-            "(dataset_dimension = '2d' AND phase = 'post_attack' AND attack_dataset_id IS NOT NULL "
-            "AND base_dataset_3d_id IS NULL AND attack_dataset_3d_id IS NULL) OR "
-            "(dataset_dimension = '3d' AND phase = 'pre_attack' AND base_dataset_3d_id IS NOT NULL "
-            "AND attack_dataset_3d_id IS NULL AND base_dataset_id IS NULL AND attack_dataset_id IS NULL) OR "
-            "(dataset_dimension = '3d' AND phase = 'post_attack' AND attack_dataset_3d_id IS NOT NULL "
-            "AND base_dataset_id IS NULL AND attack_dataset_id IS NULL)",
+            "(phase = 'pre_attack' AND base_dataset_id IS NOT NULL AND attack_dataset_id IS NULL) OR "
+            "(phase = 'post_attack' AND attack_dataset_id IS NOT NULL)",
             name="chk_eval_phase_requirements"
         ),
         CheckConstraint(
@@ -123,9 +112,8 @@ class EvalItem(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     run_id = Column(UUID(as_uuid=True), ForeignKey("eval_runs.id", ondelete="CASCADE"), nullable=False)
 
-    # Image reference (2D or 3D)
+    # Image reference (2D only)
     image_2d_id = Column(UUID(as_uuid=True), ForeignKey("images_2d.id", ondelete="SET NULL"), nullable=True)
-    image_3d_id = Column(UUID(as_uuid=True), ForeignKey("images_3d.id", ondelete="SET NULL"), nullable=True)
     file_name = Column(String(1024))
     storage_key = Column(Text)
 

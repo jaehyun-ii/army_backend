@@ -2,74 +2,142 @@ version: '3.8'
 
 services:
   # PostgreSQL Database
-  db:
-    image: postgres:17-alpine
-    container_name: army_db
+  postgres:
+    image: postgres:15-alpine
+    container_name: army_ai_postgres
+    restart: unless-stopped
     environment:
-      - POSTGRES_DB=adversarial_vision
-      - POSTGRES_USER=adversarial
-      - POSTGRES_PASSWORD=adversarial_password
-      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --locale=C
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-adminpw}
+      POSTGRES_DB: ${POSTGRES_DB:-armydb}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./complete_schema.sql:/docker-entrypoint-initdb.d/schema.sql
-    ports:
-      - "5432:5432"
+      - ./database/init:/docker-entrypoint-initdb.d
+      - ./database/complete_schema.sql:/schema/complete_schema.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U adversarial"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-armydb}"]
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
+      start_period: 10s
     networks:
-      - army_network
+      - army_ai_network
 
-  # Redis Cache (Optional)
-  redis:
-    image: redis:7-alpine
-    container_name: army_redis
-    ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-    networks:
-      - army_network
-
-  # pgAdmin (Optional - for database management)
+  # pgAdmin - Database Management UI
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: army_pgadmin
+    container_name: army_ai_pgadmin
+    restart: unless-stopped
     environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@adversarial.com
-      - PGADMIN_DEFAULT_PASSWORD=admin
-      - PGADMIN_CONFIG_SERVER_MODE=False
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-adminpw}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
     ports:
-      - "5050:80"
+      - "${PGADMIN_PORT:-5050}:80"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:
-      - db
-    restart: unless-stopped
+      postgres:
+        condition: service_healthy
     networks:
-      - army_network
-    profiles:
-      - dev
+      - army_ai_network
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: army_ai_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-adminpw}@postgres:5432/${POSTGRES_DB:-armydb}
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-this-in-production}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      APP_NAME: ${APP_NAME:-Army AI Platform API}
+      DEBUG: ${DEBUG:-False}
+      API_PREFIX: ${API_PREFIX:-/api/v1}
+      STORAGE_ROOT: /database/storage  # Docker container path
+      STORAGE_TYPE: ${STORAGE_TYPE:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      GRACEFUL_SHUTDOWN_TIMEOUT: ${GRACEFUL_SHUTDOWN_TIMEOUT:-1}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - database_storage:/database/storage  # Storage managed alongside database
+      - backend_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - army_ai_network
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: army_ai_frontend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-adminpw}@postgres:5432/${POSTGRES_DB:-armydb}?schema=public
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-your-nextauth-secret-change-this}
+      JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-change-this}
+      NODE_ENV: ${NODE_ENV:-production}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NEXT_PUBLIC_FLASK_API_URL: ${NEXT_PUBLIC_FLASK_API_URL:-http://localhost:5000}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - frontend_uploads:/app/uploads
+      - frontend_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); });"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+    networks:
+      - army_ai_network
+
+networks:
+  army_ai_network:
+    driver: bridge
+    name: army_ai_network
 
 volumes:
   postgres_data:
     driver: local
-  redis_data:
-    driver: local
+    name: army_ai_postgres_data
   pgadmin_data:
     driver: local
-
-networks:
-  army_network:
-    driver: bridge
+    name: army_ai_pgadmin_data
+  database_storage:
+    driver: local
+    name: army_ai_database_storage  # Storage removed together with database
+  backend_logs:
+    driver: local
+    name: army_ai_backend_logs
+  frontend_uploads:
+    driver: local
+    name: army_ai_frontend_uploads
+  frontend_logs:
+    driver: local
+    name: army_ai_frontend_logs

@@ -19,24 +19,16 @@ from app.schemas.dataset_2d import (
 from app.schemas.model_repo import (
     ODModelCreate,
     ODModelResponse,
-    ODModelVersionCreate,
-    ODModelVersionResponse,
     ODModelArtifactCreate,
     ODModelArtifactResponse,
 )
 from app.schemas.realtime import (
-    CameraCreate,
-    CameraUpdate,
-    CameraResponse,
     RTCaptureRunCreate,
     RTCaptureRunUpdate,
     RTCaptureRunResponse,
     RTFrameCreate,
     RTFrameUpdate,
     RTFrameResponse,
-    RTInferenceCreate,
-    RTInferenceUpdate,
-    RTInferenceResponse,
 )
 from app.schemas.experiment import (
     ExperimentCreate,
@@ -53,6 +45,24 @@ from app.schemas.evaluation import (
     EvalClassMetricsCreate,
     EvalClassMetricsUpdate,
     EvalClassMetricsResponse,
+)
+from app.schemas.annotation import (
+    AnnotationCreate,
+    AnnotationResponse,
+    AnnotationDetectionInfo,
+)
+from app.schemas.estimator import (
+    EstimatorFramework,
+    EstimatorType,
+    LoadEstimatorRequest,
+    LoadEstimatorResponse,
+    PredictRequest,
+    PredictResponse,
+    EstimatorListResponse,
+    EstimatorStatusResponse,
+    BBox,
+    YoloBBox,
+    Detection,
 )
 
 __all__ = [
@@ -78,23 +88,15 @@ __all__ = [
     # Model Repo
     "ODModelCreate",
     "ODModelResponse",
-    "ODModelVersionCreate",
-    "ODModelVersionResponse",
     "ODModelArtifactCreate",
     "ODModelArtifactResponse",
     # Real-time Performance
-    "CameraCreate",
-    "CameraUpdate",
-    "CameraResponse",
     "RTCaptureRunCreate",
     "RTCaptureRunUpdate",
     "RTCaptureRunResponse",
     "RTFrameCreate",
     "RTFrameUpdate",
     "RTFrameResponse",
-    "RTInferenceCreate",
-    "RTInferenceUpdate",
-    "RTInferenceResponse",
     # Experiments
     "ExperimentCreate",
     "ExperimentUpdate",
@@ -109,4 +111,20 @@ __all__ = [
     "EvalClassMetricsCreate",
     "EvalClassMetricsUpdate",
     "EvalClassMetricsResponse",
+    # Annotations
+    "AnnotationCreate",
+    "AnnotationResponse",
+    "AnnotationDetectionInfo",
+    # Estimators
+    "EstimatorFramework",
+    "EstimatorType",
+    "LoadEstimatorRequest",
+    "LoadEstimatorResponse",
+    "PredictRequest",
+    "PredictResponse",
+    "EstimatorListResponse",
+    "EstimatorStatusResponse",
+    "BBox",
+    "YoloBBox",
+    "Detection",
 ]

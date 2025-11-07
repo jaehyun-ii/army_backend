@@ -4,8 +4,9 @@ Provides real-time CPU, GPU, memory, and disk usage stats.
 """
 import psutil
 import time
-from typing import Dict, AsyncGenerator, Optional
+from typing import Dict, AsyncGenerator, Optional, Any
 import asyncio
+import math
 
 
 class SystemStatsService:
@@ -13,6 +14,20 @@ class SystemStatsService:
 
     def __init__(self):
         self.gpu_available = self._check_gpu_available()
+
+    @staticmethod
+    def _sanitize_value(value: Any) -> Any:
+        """Sanitize values to ensure JSON serialization compatibility."""
+        if value is None:
+            return None
+        if isinstance(value, float):
+            if math.isnan(value) or math.isinf(value):
+                return None
+        if isinstance(value, dict):
+            return {k: SystemStatsService._sanitize_value(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [SystemStatsService._sanitize_value(v) for v in value]
+        return value
 
     def _check_gpu_available(self) -> bool:
         """Check if GPU monitoring is available."""
@@ -135,7 +150,7 @@ class SystemStatsService:
 
     def get_all_stats(self) -> Dict:
         """Get all system statistics."""
-        return {
+        stats = {
             "timestamp": time.time(),
             "cpu": self.get_cpu_stats(),
             "memory": self.get_memory_stats(),
@@ -144,6 +159,7 @@ class SystemStatsService:
             "network": self.get_network_stats(),
             "process": self.get_process_stats(),
         }
+        return self._sanitize_value(stats)
 
     async def stream_stats(
         self,
@@ -162,21 +178,25 @@ class SystemStatsService:
         """
         sample_count = 0
 
-        while True:
-            # Check if we've reached max samples
-            if max_samples is not None and sample_count >= max_samples:
-                break
+        try:
+            while True:
+                # Check if we've reached max samples
+                if max_samples is not None and sample_count >= max_samples:
+                    break
 
-            # Get stats
-            stats = self.get_all_stats()
-            stats["sample_number"] = sample_count + 1
+                # Get stats
+                stats = self.get_all_stats()
+                stats["sample_number"] = sample_count + 1
+                yield stats
 
-            yield stats
+                sample_count += 1
 
-            sample_count += 1
+                # Wait for next interval - will raise CancelledError on shutdown
+                await asyncio.sleep(interval_seconds)
 
-            # Wait for next interval
-            await asyncio.sleep(interval_seconds)
+        except asyncio.CancelledError:
+            # Gracefully handle cancellation during shutdown
+            raise
 
 
 # Global instance

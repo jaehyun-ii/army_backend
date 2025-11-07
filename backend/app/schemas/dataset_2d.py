@@ -2,7 +2,7 @@
 2D Dataset schemas.
 """
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from uuid import UUID
 
@@ -56,6 +56,8 @@ class DatasetSummaryResponse(BaseModel):
     name: str
     description: Optional[str] = None
     image_count: int
+    storage_path: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime
 
@@ -91,6 +93,7 @@ class ImageCreate(ImageBase):
     """Schema for creating image."""
 
     dataset_id: UUID
+    uploaded_by: Optional[UUID] = None
 
 
 class ImageResponse(BaseModel):
@@ -113,6 +116,7 @@ class ImageResponse(BaseModel):
 # Patch 2D
 class Patch2DBase(BaseModel):
     """Base 2D patch schema."""
+    model_config = ConfigDict(protected_namespaces=())
 
     name: str
     description: Optional[str] = None
@@ -123,29 +127,38 @@ class Patch2DBase(BaseModel):
 
 
 class Patch2DCreate(Patch2DBase):
-    """Schema for creating 2D patch."""
+    """Schema for creating 2D patch (aligned with DB model field names)."""
+    model_config = ConfigDict(protected_namespaces=())
 
-    target_detect_model_version_id: UUID
+    target_model_id: Optional[UUID] = None  # DB: nullable, field name matches model
     source_dataset_id: Optional[UUID] = None
+    storage_key: Optional[str] = None
+    file_name: Optional[str] = None
+    size_bytes: Optional[int] = None
+    sha256: Optional[str] = None
 
 
 class Patch2DResponse(Patch2DBase):
-    """Schema for 2D patch response."""
+    """Schema for 2D patch response (aligned with DB model field names)."""
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
     id: UUID
-    target_detect_model_version_id: UUID
+    target_model_id: Optional[UUID]  # DB: nullable, field name matches model
     source_dataset_id: Optional[UUID]
+    storage_key: Optional[str] = None
+    file_name: Optional[str] = None
+    size_bytes: Optional[int] = None
+    sha256: Optional[str] = None
     created_by: Optional[UUID]
     created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class PatchGenerationRequest(BaseModel):
     """Schema for adversarial patch generation request."""
+    model_config = ConfigDict(protected_namespaces=())
 
     patch_name: str = Field(..., min_length=1, max_length=200)
-    detect_model_version_id: UUID
+    model_id: UUID
     dataset_id: UUID
     target_class: str = Field(..., min_length=1)
     plugin_name: str = Field(default=settings.DEFAULT_PATCH_PLUGIN)
@@ -163,6 +176,7 @@ class PatchGenerationRequest(BaseModel):
 # Attack Dataset 2D
 class AttackDataset2DBase(BaseModel):
     """Base 2D attack dataset schema."""
+    model_config = ConfigDict(protected_namespaces=())
 
     name: str
     description: Optional[str] = None
@@ -172,21 +186,22 @@ class AttackDataset2DBase(BaseModel):
 
 
 class AttackDataset2DCreate(AttackDataset2DBase):
-    """Schema for creating 2D attack dataset."""
+    """Schema for creating 2D attack dataset (aligned with DB model)."""
+    model_config = ConfigDict(protected_namespaces=())
 
-    target_detect_model_version_id: Optional[UUID] = None
-    base_dataset_id: Optional[UUID] = None
+    target_model_id: Optional[UUID] = None  # DB: nullable, field name matches model
+    base_dataset_id: UUID  # DB: NOT NULL - REQUIRED
     patch_id: Optional[UUID] = None
+    created_by: Optional[UUID] = None
 
 
 class AttackDataset2DResponse(AttackDataset2DBase):
-    """Schema for 2D attack dataset response."""
+    """Schema for 2D attack dataset response (aligned with DB model)."""
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
     id: UUID
-    target_detect_model_version_id: Optional[UUID]
-    base_dataset_id: Optional[UUID]
+    target_model_id: Optional[UUID]  # DB: nullable, field name matches model
+    base_dataset_id: UUID  # DB: NOT NULL
     patch_id: Optional[UUID]
     created_by: Optional[UUID]
     created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)

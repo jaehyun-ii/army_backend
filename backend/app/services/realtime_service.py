@@ -10,8 +10,8 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
-from app.services.custom_model_service import custom_model_service
-from app.crud.model_repo import crud_model_version
+from app.services.model_inference_service import model_inference_service
+from app.crud.model_repo import crud_model
 from app.models.realtime import RTRunStatus
 
 logger = logging.getLogger(__name__)
@@ -22,68 +22,102 @@ class RealtimeService:
 
     def __init__(self):
         self.active_captures = {}  # run_id -> VideoCapture mapping
+        self.session_stats = {}  # run_id -> stats mapping
+
+    def get_available_cameras(self, max_check: int = 10) -> list[Dict[str, Any]]:
+        """
+        Get list of available camera devices.
+
+        Args:
+            max_check: Maximum number of camera indices to check
+
+        Returns:
+            List of available cameras with their info
+        """
+        available_cameras = []
+
+        for index in range(max_check):
+            cap = cv2.VideoCapture(index)
+            if cap.isOpened():
+                # Get camera properties
+                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                fps = cap.get(cv2.CAP_PROP_FPS)
+
+                available_cameras.append({
+                    "device_id": str(index),
+                    "device_path": f"/dev/video{index}",
+                    "name": f"Camera {index}",
+                    "width": width,
+                    "height": height,
+                    "fps": fps if fps > 0 else 30.0,
+                    "is_available": True
+                })
+                cap.release()
+
+        logger.info(f"Found {len(available_cameras)} available cameras")
+        return available_cameras
 
     async def start_capture(
         self,
         db: AsyncSession,
         camera_device: str,
-        model_version_id: UUID,
         run_id: UUID,
+        model_id: Optional[UUID] = None,
         fps_target: float = 30.0,
         window_seconds: int = 5,
     ) -> Dict[str, Any]:
         """
         Start real-time video capture from webcam.
-
-        Args:
-            db: Database session
-            camera_device: Camera device path (e.g., /dev/video0)
-            model_version_id: Model version to use for inference
-            run_id: Capture run ID
-            fps_target: Target frames per second
-            window_seconds: Duration in seconds
-
-        Returns:
-            Capture statistics
         """
-        # Verify model exists
-        model_version = await crud_model_version.get_version(db, model_version_id)
-        if not model_version:
-            raise ValueError(f"Model version {model_version_id} not found")
+        if model_id:
+            # Verify model exists, but do not load it here.
+            # Loading is handled by the endpoint layer.
+            model = await crud_model.get_model(db, model_id)
+            if not model:
+                raise ValueError(f"Model {model_id} not found")
 
-        # Load model if not already loaded
-        try:
-            await custom_model_service.load_model(str(model_version_id))
-        except Exception as e:
-            logger.warning(f"Model not loaded, attempting to load: {e}")
-            # Model might already be loaded, continue
+        # Clean up any existing captures for this camera device
+        had_existing_captures = len(self.active_captures) > 0
+        for existing_run_id, existing_cap in list(self.active_captures.items()):
+            try:
+                logger.info(f"Releasing existing capture for run {existing_run_id}")
+                existing_cap.release()
+                del self.active_captures[existing_run_id]
+                logger.info(f"Released existing capture for run {existing_run_id}")
+            except Exception as e:
+                logger.warning(f"Error releasing existing capture: {e}")
+
+        # Give the camera a moment to release
+        if had_existing_captures:
+            logger.info("Waiting for camera to be fully released...")
+            time.sleep(1.5)
 
         # Open video capture
         try:
-            # Convert device to integer if it's a numeric string
             try:
                 device_index = int(camera_device)
-                cap = cv2.VideoCapture(device_index)
+                cap = cv2.VideoCapture(device_index, cv2.CAP_V4L2)
             except ValueError:
-                # Not a number, treat as device path (e.g., /dev/video0)
-                cap = cv2.VideoCapture(camera_device)
+                cap = cv2.VideoCapture(camera_device, cv2.CAP_V4L2)
 
             if not cap.isOpened():
                 raise RuntimeError(f"Failed to open camera device: {camera_device}")
 
-            # Set camera properties
-            cap.set(cv2.CAP_PROP_FPS, fps_target)
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            cap.set(cv2.CAP_PROP_FPS, fps_target)
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
+            logger.info(f"Camera opened successfully on device {camera_device}")
             self.active_captures[str(run_id)] = cap
-
             logger.info(f"Started capture for run {run_id} on device {camera_device}")
 
             return {
                 "run_id": str(run_id),
                 "camera_device": camera_device,
-                "model_version_id": str(model_version_id),
+                "model_id": str(model_id),
                 "fps_target": fps_target,
                 "window_seconds": window_seconds,
                 "status": "started"
@@ -96,23 +130,13 @@ class RealtimeService:
     async def capture_and_infer(
         self,
         run_id: UUID,
-        model_version_id: UUID,
+        estimator_id: str,
         max_frames: Optional[int] = None,
         conf_threshold: float = 0.25,
         iou_threshold: float = 0.45
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Capture frames and run inference in real-time.
-
-        Args:
-            run_id: Capture run ID
-            model_version_id: Model version ID
-            max_frames: Maximum number of frames to capture (None = unlimited)
-            conf_threshold: Confidence threshold for detections
-            iou_threshold: IOU threshold for NMS
-
-        Yields:
-            Frame results with detections
         """
         run_id_str = str(run_id)
         cap = self.active_captures.get(run_id_str)
@@ -125,11 +149,9 @@ class RealtimeService:
 
         try:
             while True:
-                # Check max frames limit
                 if max_frames and frame_count >= max_frames:
                     break
 
-                # Read frame
                 ret, frame = cap.read()
                 if not ret:
                     logger.warning(f"Failed to read frame {frame_count}")
@@ -138,36 +160,32 @@ class RealtimeService:
                 frame_count += 1
                 capture_time = time.time()
 
-                # Run inference
                 try:
                     inference_start = time.time()
-                    result = await custom_model_service.run_inference(
-                        version_id=str(model_version_id),
+                    result = await model_inference_service.run_inference(
+                        version_id=estimator_id,
                         image=frame,
                         conf_threshold=conf_threshold,
                         iou_threshold=iou_threshold
                     )
                     inference_time = (time.time() - inference_start) * 1000
 
-                    # Calculate FPS
                     elapsed = time.time() - start_time
                     current_fps = frame_count / elapsed if elapsed > 0 else 0
 
-                    # Format detections
-                    detections = [
-                        {
-                            "bbox": {
-                                "x1": det.bbox.x1,
-                                "y1": det.bbox.y1,
-                                "x2": det.bbox.x2,
-                                "y2": det.bbox.y2
-                            },
+                    detections = []
+                    for det in result.detections:
+                        x1 = det.bbox.x_center - det.bbox.width / 2
+                        y1 = det.bbox.y_center - det.bbox.height / 2
+                        x2 = det.bbox.x_center + det.bbox.width / 2
+                        y2 = det.bbox.y_center + det.bbox.height / 2
+
+                        detections.append({
+                            "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
                             "class_id": det.class_id,
                             "class_name": det.class_name,
                             "confidence": det.confidence
-                        }
-                        for det in result.detections
-                    ]
+                        })
 
                     yield {
                         "run_id": run_id_str,
@@ -190,27 +208,18 @@ class RealtimeService:
                         "status": "failed"
                     }
 
-                # Small delay to prevent overwhelming the system
                 await asyncio.sleep(0.001)
 
         finally:
             total_time = time.time() - start_time
             avg_fps = frame_count / total_time if total_time > 0 else 0
-
             logger.info(
-                f"Capture complete: {frame_count} frames in {total_time:.2f}s "
-                f"(avg FPS: {avg_fps:.2f})"
+                f"Capture complete: {frame_count} frames in {total_time:.2f}s (avg FPS: {avg_fps:.2f})"
             )
 
     async def stop_capture(self, run_id: UUID) -> Dict[str, Any]:
         """
         Stop an active capture.
-
-        Args:
-            run_id: Capture run ID
-
-        Returns:
-            Stop status
         """
         run_id_str = str(run_id)
         cap = self.active_captures.get(run_id_str)
@@ -218,26 +227,15 @@ class RealtimeService:
         if not cap:
             raise ValueError(f"No active capture for run {run_id}")
 
-        # Release camera
         cap.release()
         del self.active_captures[run_id_str]
-
         logger.info(f"Stopped capture for run {run_id}")
 
-        return {
-            "run_id": run_id_str,
-            "status": "stopped"
-        }
+        return {"run_id": run_id_str, "status": "stopped"}
 
     async def get_camera_info(self, camera_device: str) -> Dict[str, Any]:
         """
         Get camera device information.
-
-        Args:
-            camera_device: Camera device path (e.g., /dev/video0)
-
-        Returns:
-            Camera information
         """
         try:
             cap = cv2.VideoCapture(camera_device)
@@ -250,16 +248,9 @@ class RealtimeService:
                 "width": int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
                 "height": int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
                 "fps": cap.get(cv2.CAP_PROP_FPS),
-                "fourcc": int(cap.get(cv2.CAP_PROP_FOURCC)),
-                "brightness": cap.get(cv2.CAP_PROP_BRIGHTNESS),
-                "contrast": cap.get(cv2.CAP_PROP_CONTRAST),
-                "saturation": cap.get(cv2.CAP_PROP_SATURATION),
-                "is_opened": cap.isOpened()
             }
-
             cap.release()
             return info
-
         except Exception as e:
             logger.error(f"Error getting camera info: {e}")
             raise
@@ -267,18 +258,12 @@ class RealtimeService:
     async def list_available_cameras(self) -> list:
         """
         List available camera devices (cross-platform).
-
-        Returns:
-            List of available camera devices
         """
         available = []
-
-        # Use index-based access (works on Linux, macOS, Windows)
         for i in range(10):
             try:
                 cap = cv2.VideoCapture(i)
                 if cap.isOpened():
-                    # Get camera properties
                     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -294,9 +279,7 @@ class RealtimeService:
                     cap.release()
             except Exception:
                 continue
-
         return available
-
 
 # Global service instance
 realtime_service = RealtimeService()

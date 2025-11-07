@@ -4,9 +4,12 @@ Storage file serving endpoints.
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pathlib import Path
-import os
+import logging
+
+from app.core.config import settings
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/{storage_key:path}")
@@ -20,23 +23,30 @@ async def get_file(storage_key: str):
     Returns:
         The file as a response
     """
-    import logging
-    logger = logging.getLogger(__name__)
-
     logger.info(f"Requesting file with storage_key: {storage_key}")
 
     # 보안: storage_key가 상위 디렉토리 접근을 시도하는지 확인
-    if ".." in storage_key or storage_key.startswith("/"):
+    if ".." in storage_key:
         raise HTTPException(status_code=400, detail="Invalid storage key")
 
-    # 파일 경로 구성 (절대 경로)
-    file_path = Path(os.getcwd()) / "storage" / storage_key
+    storage_root = Path(settings.STORAGE_ROOT)
+
+    # Handle both absolute and relative paths
+    if storage_key.startswith("/") or storage_key.startswith(str(storage_root)):
+        # Absolute path - check if it's within storage_root
+        file_path = Path(storage_key)
+        if not file_path.is_relative_to(storage_root):
+            raise HTTPException(status_code=400, detail="Storage key outside of storage root")
+    else:
+        # Relative path - construct from storage_root
+        file_path = storage_root / storage_key
+
     logger.info(f"Resolved file path: {file_path}")
     logger.info(f"File exists: {file_path.exists()}")
 
     # Fallback: 파일이 없고 storage_key에 "datasets/"가 없으면 추가해보기
     if not file_path.exists() and not storage_key.startswith("datasets/"):
-        fallback_path = Path(os.getcwd()) / "storage" / "datasets" / storage_key
+        fallback_path = storage_root / "datasets" / storage_key
         logger.info(f"Trying fallback path: {fallback_path}")
         if fallback_path.exists():
             file_path = fallback_path
@@ -65,5 +75,10 @@ async def get_file(storage_key: str):
     return FileResponse(
         path=str(file_path),
         media_type=mime_type,
-        filename=file_path.name
+        filename=file_path.name,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        }
     )

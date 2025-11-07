@@ -1,27 +1,36 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest) {
-  const token = request.cookies.get('access_token')?.value;
-  const { pathname } = request.nextUrl;
+  const path = request.nextUrl.pathname
 
-  // 인증이 필요없는 경로
-  const publicPaths = ['/auth/login', '/auth/register'];
-  const isPublicPath = publicPaths.some(path => pathname.startsWith(path));
-
-  // 로그인되지 않았고, 공개 경로가 아닌 경우
-  if (!token && !isPublicPath) {
-    const loginUrl = new URL('/auth/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(loginUrl);
+  // Skip middleware for API routes and static files
+  if (
+    path.startsWith('/api/') ||
+    path.startsWith('/_next/') ||
+    path.startsWith('/static/') ||
+    path.includes('.')
+  ) {
+    return NextResponse.next()
   }
 
-  // 로그인되어 있고, 로그인 페이지에 접근하는 경우
-  if (token && pathname === '/auth/login') {
-    return NextResponse.redirect(new URL('/', request.url));
+  // Get token from cookie
+  const token = request.cookies.get('token')?.value
+
+  // Public paths that don't require authentication
+  const isPublicPath = path === '/login' || path === '/register' || path === '/'
+
+  // Redirect to login if accessing protected path without token
+  if (!isPublicPath && !token) {
+    return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  return NextResponse.next();
+  // Redirect to dashboard if accessing login with token
+  if (path === '/login' && token) {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
+  return NextResponse.next()
 }
 
 export const config = {
@@ -35,4 +44,4 @@ export const config = {
      */
     '/((?!api|_next/static|_next/image|favicon.ico).*)',
   ],
-};
+}

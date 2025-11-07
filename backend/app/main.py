@@ -1,9 +1,13 @@
 """
 FastAPI main application.
 """
+from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.utils import get_openapi
+import asyncio
 
 from app.core.config import settings
 from app.api.v1.router import api_router
@@ -13,6 +17,9 @@ from app.core.cache import cache_manager
 # Setup logging
 setup_logging()
 logger = get_logger(__name__)
+
+# Track active streaming tasks
+active_tasks = set()
 
 # Create FastAPI application
 app = FastAPI(
@@ -24,11 +31,9 @@ app = FastAPI(
     ### Features
     - 📊 **Dataset Management**: Upload and manage 2D/3D datasets
     - 🤖 **Model Repository**: Store and version AI models
-    - ⚔️ **Adversarial Attacks**: Generate patches and noise attacks
+    - ⚔️ **Adversarial Attacks**: Generate attacks using FGSM, PGD, etc.
     - 📈 **Evaluation**: Benchmark model robustness
     - 🔄 **Real-time Processing**: Stream processing capabilities
-    - 🔌 **Plugin System**: Extensible attack methods
-
     ### Authentication
     Most endpoints require Bearer token authentication.
     """,
@@ -54,10 +59,19 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Include API router
 app.include_router(api_router, prefix=settings.API_PREFIX)
+
+# Mount storage directory for static file serving (images, models, etc.)
+storage_path = Path(settings.STORAGE_ROOT)
+if storage_path.exists():
+    app.mount("/storage", StaticFiles(directory=str(storage_path)), name="storage")
+    logger.info(f"Mounted storage directory: {storage_path}")
+else:
+    logger.warning(f"Storage directory not found: {storage_path}")
 
 
 @app.get("/health", tags=["System"])
@@ -86,23 +100,22 @@ async def startup_event():
     await cache_manager.initialize()
     logger.info(f"Cache initialized: {settings.CACHE_TYPE}")
 
-    # Load attack plugins
-    from app.plugins import attack_plugin_registry
-    plugin_count = attack_plugin_registry.discover_plugins()
-    logger.info(f"Loaded {plugin_count} attack plugin(s)")
-
-    # List loaded plugins
-    plugins = attack_plugin_registry.list_plugins()
-    if plugins:
-        logger.info("Available attack plugins:")
-        for plugin in plugins:
-            logger.info(f"  - {plugin['name']} v{plugin['version']} ({plugin['category']})")
-
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Application shutdown tasks."""
     logger.info(f"Shutting down {settings.APP_NAME}...")
+
+    # Cancel all active streaming tasks
+    if active_tasks:
+        logger.info(f"Cancelling {len(active_tasks)} active streaming task(s)...")
+        for task in active_tasks:
+            if not task.done():
+                task.cancel()
+
+        # Wait briefly for tasks to cancel
+        await asyncio.gather(*active_tasks, return_exceptions=True)
+        logger.info("All streaming tasks cancelled")
 
     # Close cache connection
     await cache_manager.close()
@@ -111,10 +124,26 @@ async def shutdown_event():
 
 if __name__ == "__main__":
     import uvicorn
+    import os
+
+    # In development mode, use shorter timeout for faster hot reload
+    timeout_graceful_shutdown = 1 if settings.ENVIRONMENT.value == "development" else 30
+
+    # Get the backend root directory (parent of app/)
+    backend_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    app_dir = os.path.join(backend_root, "app")
+
+    # Only watch app/ directory, not storage/ or logs/
+    reload_dirs = [app_dir] if settings.DEBUG else None
+
+    logger.info(f"Starting uvicorn with reload_dirs: {reload_dirs}")
 
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
         port=8000,
         reload=settings.DEBUG,
+        reload_dirs=reload_dirs,
+        timeout_graceful_shutdown=timeout_graceful_shutdown,
+        log_level="info"
     )

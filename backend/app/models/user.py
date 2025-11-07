@@ -18,14 +18,14 @@ class UserRole(str, enum.Enum):
 
 
 class User(Base):
-    """User model."""
+    """User model (aligned with database schema)."""
 
     __tablename__ = "users"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email = Column(String(320), nullable=False, unique=True, index=True)
+    username = Column(String(100), nullable=False, index=True)  # DB: NOT NULL, unique via index
+    email = Column(String(255), nullable=True)  # DB: nullable (optional)
     password_hash = Column(String(255), nullable=False)
-    display_name = Column(String(200))
     role = Column(SQLEnum(UserRole, name="user_role_enum", values_callable=lambda x: [e.value for e in x]), nullable=False, default=UserRole.USER.value)
     is_active = Column(Boolean, nullable=False, default=True)
 
@@ -34,4 +34,4 @@ class User(Base):
     deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self):
-        return f"<User(id={self.id}, email={self.email}, role={self.role})>"
+        return f"<User(id={self.id}, username={self.username}, role={self.role})>"
